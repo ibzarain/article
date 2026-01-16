@@ -5,6 +5,7 @@ const devCerts = require("office-addin-dev-certs");
 const CopyWebpackPlugin = require("copy-webpack-plugin");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
 const webpack = require("webpack");
+const Dotenv = require("dotenv-webpack");
 
 const urlDev = "https://localhost:3000/";
 const urlProd = "https://amico-article.vercel.app/";
@@ -63,6 +64,11 @@ module.exports = async (env, options) => {
       ],
     },
     plugins: [
+      new Dotenv({
+        path: "./.env",
+        safe: false,
+        systemvars: true,
+      }),
       new HtmlWebpackPlugin({
         filename: "taskpane.html",
         template: "./src/taskpane/taskpane.html",
@@ -99,6 +105,9 @@ module.exports = async (env, options) => {
       }),
       new webpack.ProvidePlugin({
         Promise: ["es6-promise", "Promise"],
+      }),
+      new webpack.DefinePlugin({
+        "process.env.OPENAI_API_KEY": JSON.stringify(process.env.OPENAI_API_KEY),
       }),
     ],
     devServer: {
