@@ -28,6 +28,7 @@ const useStyles = makeStyles({
     height: "100%",
     backgroundColor: "#1e1e1e",
     color: "#cccccc",
+    overflow: "hidden",
   },
   chatPanel: {
     flex: 1,
@@ -35,6 +36,8 @@ const useStyles = makeStyles({
     flexDirection: "column",
     backgroundColor: "#1e1e1e",
     borderRight: "1px solid #3e3e42",
+    height: "100%",
+    overflow: "hidden",
   },
   messagesContainer: {
     flex: 1,
@@ -42,6 +45,7 @@ const useStyles = makeStyles({
     flexDirection: "column",
     gap: "16px",
     overflowY: "auto",
+    overflowX: "hidden",
     padding: "24px",
     scrollbarWidth: "thin",
     scrollbarColor: "#424242 #1e1e1e",
@@ -93,6 +97,7 @@ const useStyles = makeStyles({
     padding: "16px 24px",
     borderTop: "1px solid #3e3e42",
     backgroundColor: "#252526",
+    flexShrink: 0,
   },
   inputRow: {
     display: "flex",
@@ -101,16 +106,17 @@ const useStyles = makeStyles({
   },
   textarea: {
     flex: 1,
-    minHeight: "60px",
+    minHeight: "44px",
     maxHeight: "200px",
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
     fontSize: "14px",
     backgroundColor: "#1e1e1e",
     color: "#cccccc",
     border: "1px solid #3e3e42",
-    borderRadius: "6px",
-    padding: "12px 16px",
-    resize: "vertical",
+    borderRadius: "22px",
+    padding: "10px 20px",
+    resize: "none",
+    lineHeight: "1.5",
     "&:focus": {
       outline: "none",
       borderColor: "#007acc",
@@ -121,18 +127,26 @@ const useStyles = makeStyles({
     },
   },
   sendButton: {
-    minWidth: "80px",
+    width: "44px",
     height: "44px",
+    minWidth: "44px",
     backgroundColor: "#007acc",
     color: "#ffffff",
     border: "none",
-    borderRadius: "6px",
+    borderRadius: "50%",
     fontSize: "14px",
     fontWeight: "500",
     cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
     transition: "all 0.2s ease",
     "&:hover:not(:disabled)": {
       backgroundColor: "#005a9e",
+      transform: "scale(1.05)",
+    },
+    "&:active:not(:disabled)": {
+      transform: "scale(0.95)",
     },
     "&:disabled": {
       opacity: 0.5,
@@ -188,6 +202,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [changeTracker] = useState<ChangeTracking>(() => createChangeTracker());
   const [changes, setChanges] = useState<DocumentChange[]>([]);
   const styles = useStyles();
@@ -214,6 +229,15 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
     scrollToBottom();
   }, [messages]);
 
+  // Auto-resize textarea
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = "auto";
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+    }
+  }, [input]);
+
   const handleSend = async () => {
     if (!input.trim() || isLoading) {
       return;
@@ -223,6 +247,11 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
     setInput("");
     setError(null);
     setIsLoading(true);
+    
+    // Reset textarea height
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
 
     // Add user message
     const newMessages: Message[] = [...messages, { role: "user", content: userMessage }];
@@ -356,6 +385,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
         <div className={styles.inputContainer}>
           <div className={styles.inputRow}>
             <textarea
+              ref={textareaRef}
               className={styles.textarea}
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -367,16 +397,18 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
               }}
               placeholder="Ask me to edit your document..."
               disabled={isLoading}
+              rows={1}
             />
             <button
               disabled={!input.trim() || isLoading}
               onClick={handleSend}
               className={styles.sendButton}
+              title="Send message"
             >
               {isLoading ? (
                 <Spinner size="tiny" />
               ) : (
-                <SendRegular style={{ fontSize: "16px" }} />
+                <SendRegular style={{ fontSize: "18px" }} />
               )}
             </button>
           </div>
