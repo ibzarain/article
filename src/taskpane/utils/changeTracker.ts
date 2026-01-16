@@ -1,4 +1,5 @@
 import { DocumentChange, ChangeTracking } from '../types/changes';
+import { acceptInlineChange, rejectInlineChange } from './inlineDiffRenderer';
 
 /**
  * Creates a change tracking system for document edits
@@ -6,7 +7,7 @@ import { DocumentChange, ChangeTracking } from '../types/changes';
 export function createChangeTracker(): ChangeTracking {
   const changes: DocumentChange[] = [];
 
-  const addChange = (change: DocumentChange) => {
+  const addChange = async (change: DocumentChange) => {
     changes.push(change);
   };
 
@@ -19,10 +20,21 @@ export function createChangeTracker(): ChangeTracking {
 
   const acceptChange = async (id: string) => {
     const change = changes.find(c => c.id === id);
-    if (change && !change.applied) {
-      // Mark as applied - the change is already in the document
+    if (!change) return;
+
+    try {
+      // Use inline diff renderer to accept the change
+      await acceptInlineChange(change);
+      
+      // Mark as applied
       change.applied = true;
       change.canUndo = true;
+      
+      // Optionally remove from tracking after acceptance
+      // removeChange(id);
+    } catch (error) {
+      console.error('Error accepting change:', error);
+      throw error;
     }
   };
 
@@ -31,74 +43,9 @@ export function createChangeTracker(): ChangeTracking {
     if (!change) return;
 
     try {
-      // Undo the change based on its type
-      await Word.run(async (context) => {
-        if (change.type === 'edit' && change.searchText && change.oldText) {
-          // Revert edit: replace newText back with oldText
-          const searchResults = context.document.body.search(change.newText || '', {
-            matchCase: false,
-            matchWholeWord: false,
-          });
-          context.load(searchResults, 'items');
-          await context.sync();
-          
-          if (searchResults.items.length > 0) {
-            // Find the exact match (simplified - in production you'd want better matching)
-            searchResults.items[0].insertText(change.oldText, Word.InsertLocation.replace);
-            await context.sync();
-          }
-        } else if (change.type === 'insert' && change.searchText) {
-          // Remove inserted text
-          const searchResults = context.document.body.search(change.newText || '', {
-            matchCase: false,
-            matchWholeWord: false,
-          });
-          context.load(searchResults, 'items');
-          await context.sync();
-          
-          if (searchResults.items.length > 0) {
-            searchResults.items[0].delete();
-            await context.sync();
-          }
-        } else if (change.type === 'delete' && change.oldText) {
-          // Restore deleted text
-          const searchResults = context.document.body.search(change.searchText || '', {
-            matchCase: false,
-            matchWholeWord: false,
-          });
-          context.load(searchResults, 'items');
-          await context.sync();
-          
-          if (searchResults.items.length > 0) {
-            searchResults.items[0].insertText(change.oldText, Word.InsertLocation.after);
-            await context.sync();
-          }
-        } else if (change.type === 'format' && change.searchText) {
-          // Revert formatting (simplified - would need to track original format)
-          const searchResults = context.document.body.search(change.searchText, {
-            matchCase: false,
-            matchWholeWord: false,
-          });
-          context.load(searchResults, 'items');
-          context.load(searchResults, 'font');
-          await context.sync();
-          
-          if (searchResults.items.length > 0 && change.formatChanges) {
-            const font = searchResults.items[0].font;
-            if (change.formatChanges.bold !== undefined) {
-              font.bold = !change.formatChanges.bold;
-            }
-            if (change.formatChanges.italic !== undefined) {
-              font.italic = !change.formatChanges.italic;
-            }
-            if (change.formatChanges.underline !== undefined) {
-              font.underline = change.formatChanges.underline ? Word.UnderlineType.none : Word.UnderlineType.single;
-            }
-            await context.sync();
-          }
-        }
-      });
-
+      // Use inline diff renderer to reject the change
+      await rejectInlineChange(change);
+      
       // Remove the change from tracking
       removeChange(id);
     } catch (error) {

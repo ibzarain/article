@@ -25,7 +25,7 @@ export interface DocumentChange {
 
 export interface ChangeTracking {
   changes: DocumentChange[];
-  addChange: (change: DocumentChange) => void;
+  addChange: (change: DocumentChange) => Promise<void>;
   removeChange: (id: string) => void;
   acceptChange: (id: string) => Promise<void>;
   rejectChange: (id: string) => Promise<void>;

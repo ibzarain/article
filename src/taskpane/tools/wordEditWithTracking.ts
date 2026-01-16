@@ -2,11 +2,12 @@
 import { tool } from 'ai';
 import { z } from 'zod';
 import { DocumentChange } from '../types/changes';
+import { renderInlineDiff } from '../utils/inlineDiffRenderer';
 
 // Global change tracker - will be set by the agent wrapper
-let changeTracker: ((change: DocumentChange) => void) | null = null;
+let changeTracker: ((change: DocumentChange) => Promise<void>) | null = null;
 
-export function setChangeTracker(tracker: (change: DocumentChange) => void) {
+export function setChangeTracker(tracker: (change: DocumentChange) => Promise<void>) {
   changeTracker = tracker;
 }
 
@@ -14,15 +15,21 @@ function generateChangeId(): string {
   return `change_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
-function trackChange(change: Omit<DocumentChange, 'id' | 'timestamp' | 'applied' | 'canUndo'>): void {
+async function trackChange(change: Omit<DocumentChange, 'id' | 'timestamp' | 'applied' | 'canUndo'>): Promise<void> {
   if (changeTracker) {
-    changeTracker({
+    const changeObj: DocumentChange = {
       ...change,
       id: generateChangeId(),
       timestamp: new Date(),
-      applied: true, // Changes are applied immediately
+      applied: false, // Changes are pending until accepted
       canUndo: true,
-    });
+    };
+    
+    // Render inline diff in the document
+    await renderInlineDiff(changeObj);
+    
+    // Track the change
+    await changeTracker(changeObj);
   }
 }
 
@@ -58,56 +65,18 @@ export const editDocumentTool = tool({
         let replacementCount = 0;
         
         for (const item of itemsToReplace) {
-          // Assess format context before replacement
-          const paragraph = item.paragraphs.getFirst();
-          context.load(paragraph, ['listItem', 'style']);
-          context.load(item.font, ['bold', 'italic', 'underline', 'size', 'color', 'highlightColor']);
+          // Load current text to get the actual old text (may differ from searchText)
+          context.load(item, 'text');
           await context.sync();
-          
-          // Store formatting properties
-          const isListItem = paragraph.listItem;
-          const paragraphStyle = paragraph.style;
-          const fontBold = item.font.bold;
-          const fontItalic = item.font.italic;
-          const fontUnderline = item.font.underline;
-          const fontSize = item.font.size;
-          const fontColor = item.font.color;
-          const fontHighlight = item.font.highlightColor;
-          
-          // Replace text (this preserves some formatting automatically)
-          item.insertText(newText, Word.InsertLocation.replace);
-          await context.sync();
-          
-          // Re-apply formatting to the new text
-          const newRange = item;
-          const newFont = newRange.font;
-          
-          if (fontBold !== null) newFont.bold = fontBold;
-          if (fontItalic !== null) newFont.italic = fontItalic;
-          if (fontUnderline !== null) newFont.underline = fontUnderline;
-          if (fontSize !== null) newFont.size = fontSize;
-          if (fontColor !== null) newFont.color = fontColor;
-          if (fontHighlight !== null) newFont.highlightColor = fontHighlight;
-          
-          // Ensure paragraph formatting is preserved
-          const newParagraph = newRange.paragraphs.getFirst();
-          context.load(newParagraph, ['listItem', 'style']);
-          await context.sync();
-          
-          if (isListItem) {
-            newParagraph.listItem = paragraph.listItem;
-          }
-          if (paragraphStyle && paragraphStyle !== 'Normal') {
-            newParagraph.style = paragraphStyle;
-          }
+          const actualOldText = item.text;
           
           replacementCount++;
           
-          // Track the change
-          trackChange({
+          // Track the change (will render inline diff)
+          await trackChange({
             type: 'edit',
-            description: `Replaced "${searchText}" with "${newText}"`,
-            oldText: searchText,
+            description: `Replaced "${actualOldText}" with "${newText}"`,
+            oldText: actualOldText,
             newText: newText,
             searchText: searchText,
           });
@@ -255,8 +224,8 @@ export const insertTextTool = tool({
         
         await context.sync();
         
-        // Track the change
-        trackChange({
+        // Track the change (will render inline diff)
+        await trackChange({
           type: 'insert',
           description: `Inserted "${text}" ${location}${searchText ? ` "${searchText}"` : ''}`,
           newText: text,
@@ -314,37 +283,19 @@ export const deleteTextTool = tool({
         let deletionCount = 0;
         
         for (const item of itemsToDelete) {
-          // Assess context before deletion
-          const paragraph = item.paragraphs.getFirst();
-          context.load(paragraph, ['text']);
+          // Load the text to be deleted
           context.load(item, 'text');
           await context.sync();
           
           const deletedText = item.text;
-          const paragraphText = paragraph.text.trim();
-          const itemText = item.text.trim();
-          
-          // Determine if we should delete the entire paragraph
-          // Delete paragraph if: explicitly requested, or if the text is the entire paragraph
-          const shouldDeleteParagraph = deleteParagraph === true || 
-            (deleteParagraph !== false && paragraphText === itemText && paragraphText.length > 0);
-          
-          if (shouldDeleteParagraph) {
-            // Delete entire paragraph
-            paragraph.delete();
-          } else {
-            // Delete only the matched text, preserving paragraph structure
-            item.delete();
-          }
           
           deletionCount++;
           
-          // Track the change
-          trackChange({
+          // Track the change (will render inline diff - show deleted text with strikethrough)
+          // Don't actually delete yet, the inline diff renderer will show it with strikethrough
+          await trackChange({
             type: 'delete',
-            description: shouldDeleteParagraph 
-              ? `Deleted paragraph containing "${deletedText}"`
-              : `Deleted "${deletedText}"`,
+            description: `Deleted "${deletedText}"`,
             oldText: deletedText,
             searchText: searchText,
           });
@@ -460,13 +411,13 @@ export const formatTextTool = tool({
         
         await context.sync();
         
-        // Track the change
+        // Track the change (formatting is applied immediately but we still track it)
         if (formattedCount > 0) {
           const description = searchText === '*' || searchText.toLowerCase() === 'all'
             ? 'Formatted entire document'
             : `Formatted "${searchText}"`;
             
-          trackChange({
+          await trackChange({
             type: 'format',
             description,
             searchText: searchText,
