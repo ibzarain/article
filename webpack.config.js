@@ -7,7 +7,7 @@ const HtmlWebpackPlugin = require("html-webpack-plugin");
 const webpack = require("webpack");
 
 const urlDev = "https://localhost:3000/";
-const urlProd = "https://www.contoso.com/"; // CHANGE THIS TO YOUR PRODUCTION DEPLOYMENT LOCATION
+const urlProd = "https://amico-article.vercel.app/";
 
 async function getHttpsOptions() {
   const httpsOptions = await devCerts.getHttpsServerOptions();
@@ -79,14 +79,14 @@ module.exports = async (env, options) => {
             to: "[name]" + "[ext]",
             transform(content) {
               // Keep localhost URLs for local development (Word Online requires HTTP localhost)
-              // Uncomment the else block below if you need production URL replacement
               if (dev) {
                 return content;
               } else {
-                // For local dev with Word Online, keep localhost URLs
-                return content;
-                // For production deployment, uncomment this line instead:
-                // return content.toString().replace(new RegExp(urlDev, "g"), urlProd);
+                // For production deployment, replace localhost and Cloudflare URLs with Vercel URL
+                let result = content.toString();
+                result = result.replace(new RegExp(urlDev, "g"), urlProd);
+                result = result.replace(/https:\/\/[^\/]+\.trycloudflare\.com/g, urlProd.replace(/\/$/, ""));
+                return result;
               }
             },
           },

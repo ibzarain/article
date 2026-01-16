@@ -5,7 +5,7 @@ import { Button, Field, Textarea, tokens, makeStyles } from "@fluentui/react-com
 /* global HTMLTextAreaElement */
 
 interface TextInsertionProps {
-  insertText: (text: string) => void;
+  insertText: (text: string, searchText: string) => Promise<void>;
 }
 
 const useStyles = makeStyles({
@@ -29,25 +29,36 @@ const useStyles = makeStyles({
 });
 
 const TextInsertion: React.FC<TextInsertionProps> = (props: TextInsertionProps) => {
-  const [text, setText] = useState<string>("Some text.");
+  const [textToInsert, setTextToInsert] = useState<string>("");
+  const [searchText, setSearchText] = useState<string>("");
 
   const handleTextInsertion = async () => {
-    await props.insertText(text);
+    if (!textToInsert.trim() || !searchText.trim()) {
+      return;
+    }
+    await props.insertText(textToInsert, searchText);
   };
 
-  const handleTextChange = async (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setText(event.target.value);
+  const handleTextToInsertChange = async (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setTextToInsert(event.target.value);
+  };
+
+  const handleSearchTextChange = async (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setSearchText(event.target.value);
   };
 
   const styles = useStyles();
 
   return (
     <div className={styles.textPromptAndInsertion}>
-      <Field className={styles.textAreaField} size="large" label="Enter text to be inserted into the document.">
-        <Textarea size="large" value={text} onChange={handleTextChange} />
+      <Field className={styles.textAreaField} size="large" label="Text to insert">
+        <Textarea size="large" value={textToInsert} onChange={handleTextToInsertChange} placeholder="Enter text to insert..." />
       </Field>
-      <Field className={styles.instructions}>Click the button to insert text.</Field>
-      <Button appearance="primary" disabled={false} size="large" onClick={handleTextInsertion}>
+      <Field className={styles.textAreaField} size="large" label="Find text (insert before)">
+        <Textarea size="large" value={searchText} onChange={handleSearchTextChange} placeholder="Enter text to find (case-insensitive)..." />
+      </Field>
+      <Field className={styles.instructions}>Click the button to insert text before the found text.</Field>
+      <Button appearance="primary" disabled={!textToInsert.trim() || !searchText.trim()} size="large" onClick={handleTextInsertion}>
         Insert text
       </Button>
     </div>
