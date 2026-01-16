@@ -1,0 +1,10 @@
+"use client";
+import { createFluentFontIcon } from '../../utils/fonts/createFluentFontIcon';
+export const GaugeFilled = ( /*#__PURE__*/createFluentFontIcon("GaugeFilled", "", 2, undefined));
+export const GaugeRegular = ( /*#__PURE__*/createFluentFontIcon("GaugeRegular", "", 2, undefined));
+export const Gauge20Regular = ( /*#__PURE__*/createFluentFontIcon("Gauge20Regular", "", 1, 20));
+export const Gauge20Filled = ( /*#__PURE__*/createFluentFontIcon("Gauge20Filled", "", 0, 20));
+export const Gauge24Regular = ( /*#__PURE__*/createFluentFontIcon("Gauge24Regular", "", 1, 24));
+export const Gauge24Filled = ( /*#__PURE__*/createFluentFontIcon("Gauge24Filled", "", 0, 24));
+export const Gauge32Regular = ( /*#__PURE__*/createFluentFontIcon("Gauge32Regular", "", 1, 32));
+export const Gauge32Filled = ( /*#__PURE__*/createFluentFontIcon("Gauge32Filled", "", 0, 32));

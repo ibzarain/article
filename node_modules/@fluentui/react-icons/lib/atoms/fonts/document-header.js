@@ -1,0 +1,10 @@
+"use client";
+import { createFluentFontIcon } from '../../utils/fonts/createFluentFontIcon';
+export const DocumentHeaderFilled = ( /*#__PURE__*/createFluentFontIcon("DocumentHeaderFilled", "", 2, undefined));
+export const DocumentHeaderRegular = ( /*#__PURE__*/createFluentFontIcon("DocumentHeaderRegular", "", 2, undefined));
+export const DocumentHeader16Regular = ( /*#__PURE__*/createFluentFontIcon("DocumentHeader16Regular", "", 1, 16));
+export const DocumentHeader16Filled = ( /*#__PURE__*/createFluentFontIcon("DocumentHeader16Filled", "", 0, 16));
+export const DocumentHeader20Regular = ( /*#__PURE__*/createFluentFontIcon("DocumentHeader20Regular", "", 1, 20));
+export const DocumentHeader20Filled = ( /*#__PURE__*/createFluentFontIcon("DocumentHeader20Filled", "", 0, 20));
+export const DocumentHeader24Regular = ( /*#__PURE__*/createFluentFontIcon("DocumentHeader24Regular", "", 1, 24));
+export const DocumentHeader24Filled = ( /*#__PURE__*/createFluentFontIcon("DocumentHeader24Filled", "", 0, 24));

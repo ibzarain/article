@@ -1,0 +1,6 @@
+"use client";
+import { createFluentFontIcon } from '../../utils/fonts/createFluentFontIcon';
+export const SaveSyncFilled = ( /*#__PURE__*/createFluentFontIcon("SaveSyncFilled", "", 2, undefined));
+export const SaveSyncRegular = ( /*#__PURE__*/createFluentFontIcon("SaveSyncRegular", "", 2, undefined));
+export const SaveSync20Regular = ( /*#__PURE__*/createFluentFontIcon("SaveSync20Regular", "", 1, 20));
+export const SaveSync20Filled = ( /*#__PURE__*/createFluentFontIcon("SaveSync20Filled", "", 0, 20));

@@ -1,0 +1,10 @@
+"use client";
+import { createFluentFontIcon } from '../../utils/fonts/createFluentFontIcon';
+export const WindowNewFilled = ( /*#__PURE__*/createFluentFontIcon("WindowNewFilled", "", 2, undefined));
+export const WindowNewRegular = ( /*#__PURE__*/createFluentFontIcon("WindowNewRegular", "", 2, undefined));
+export const WindowNew16Regular = ( /*#__PURE__*/createFluentFontIcon("WindowNew16Regular", "", 1, 16));
+export const WindowNew16Filled = ( /*#__PURE__*/createFluentFontIcon("WindowNew16Filled", "", 0, 16));
+export const WindowNew20Regular = ( /*#__PURE__*/createFluentFontIcon("WindowNew20Regular", "", 1, 20));
+export const WindowNew20Filled = ( /*#__PURE__*/createFluentFontIcon("WindowNew20Filled", "", 0, 20));
+export const WindowNew24Regular = ( /*#__PURE__*/createFluentFontIcon("WindowNew24Regular", "", 1, 24));
+export const WindowNew24Filled = ( /*#__PURE__*/createFluentFontIcon("WindowNew24Filled", "", 0, 24));

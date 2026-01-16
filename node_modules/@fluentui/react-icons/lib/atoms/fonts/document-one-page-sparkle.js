@@ -1,0 +1,10 @@
+"use client";
+import { createFluentFontIcon } from '../../utils/fonts/createFluentFontIcon';
+export const DocumentOnePageSparkleFilled = ( /*#__PURE__*/createFluentFontIcon("DocumentOnePageSparkleFilled", "", 2, undefined));
+export const DocumentOnePageSparkleRegular = ( /*#__PURE__*/createFluentFontIcon("DocumentOnePageSparkleRegular", "", 2, undefined));
+export const DocumentOnePageSparkle16Regular = ( /*#__PURE__*/createFluentFontIcon("DocumentOnePageSparkle16Regular", "󰃗", 1, 16));
+export const DocumentOnePageSparkle16Filled = ( /*#__PURE__*/createFluentFontIcon("DocumentOnePageSparkle16Filled", "󰃖", 0, 16));
+export const DocumentOnePageSparkle20Regular = ( /*#__PURE__*/createFluentFontIcon("DocumentOnePageSparkle20Regular", "󰃘", 1, 20));
+export const DocumentOnePageSparkle20Filled = ( /*#__PURE__*/createFluentFontIcon("DocumentOnePageSparkle20Filled", "󰃗", 0, 20));
+export const DocumentOnePageSparkle24Regular = ( /*#__PURE__*/createFluentFontIcon("DocumentOnePageSparkle24Regular", "󰃙", 1, 24));
+export const DocumentOnePageSparkle24Filled = ( /*#__PURE__*/createFluentFontIcon("DocumentOnePageSparkle24Filled", "󰃘", 0, 24));

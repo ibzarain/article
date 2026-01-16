@@ -1,0 +1,6 @@
+"use client";
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.ColorFilled = void 0;
+const createFluentFontIcon_1 = require("../../utils/fonts/createFluentFontIcon");
+exports.ColorFilled = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("ColorFilled", "", 2, undefined));

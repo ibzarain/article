@@ -1,0 +1,11 @@
+"use client";
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Presenter24Filled = exports.Presenter24Regular = exports.Presenter20Filled = exports.Presenter20Regular = exports.PresenterRegular = exports.PresenterFilled = void 0;
+const createFluentFontIcon_1 = require("../../utils/fonts/createFluentFontIcon");
+exports.PresenterFilled = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("PresenterFilled", "", 2, undefined));
+exports.PresenterRegular = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("PresenterRegular", "", 2, undefined));
+exports.Presenter20Regular = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("Presenter20Regular", "", 1, 20));
+exports.Presenter20Filled = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("Presenter20Filled", "", 0, 20));
+exports.Presenter24Regular = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("Presenter24Regular", "", 1, 24));
+exports.Presenter24Filled = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("Presenter24Filled", "", 0, 24));

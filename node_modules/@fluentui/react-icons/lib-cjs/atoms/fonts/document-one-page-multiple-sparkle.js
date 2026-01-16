@@ -1,0 +1,13 @@
+"use client";
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.DocumentOnePageMultipleSparkle24Filled = exports.DocumentOnePageMultipleSparkle24Regular = exports.DocumentOnePageMultipleSparkle20Filled = exports.DocumentOnePageMultipleSparkle20Regular = exports.DocumentOnePageMultipleSparkle16Filled = exports.DocumentOnePageMultipleSparkle16Regular = exports.DocumentOnePageMultipleSparkleRegular = exports.DocumentOnePageMultipleSparkleFilled = void 0;
+const createFluentFontIcon_1 = require("../../utils/fonts/createFluentFontIcon");
+exports.DocumentOnePageMultipleSparkleFilled = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentOnePageMultipleSparkleFilled", "", 2, undefined));
+exports.DocumentOnePageMultipleSparkleRegular = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentOnePageMultipleSparkleRegular", "", 2, undefined));
+exports.DocumentOnePageMultipleSparkle16Regular = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentOnePageMultipleSparkle16Regular", "󰝿", 1, 16));
+exports.DocumentOnePageMultipleSparkle16Filled = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentOnePageMultipleSparkle16Filled", "󰟼", 0, 16));
+exports.DocumentOnePageMultipleSparkle20Regular = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentOnePageMultipleSparkle20Regular", "󰞀", 1, 20));
+exports.DocumentOnePageMultipleSparkle20Filled = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentOnePageMultipleSparkle20Filled", "󰟽", 0, 20));
+exports.DocumentOnePageMultipleSparkle24Regular = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentOnePageMultipleSparkle24Regular", "󰞁", 1, 24));
+exports.DocumentOnePageMultipleSparkle24Filled = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentOnePageMultipleSparkle24Filled", "󰟾", 0, 24));

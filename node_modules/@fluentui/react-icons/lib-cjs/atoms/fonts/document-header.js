@@ -1,0 +1,13 @@
+"use client";
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.DocumentHeader24Filled = exports.DocumentHeader24Regular = exports.DocumentHeader20Filled = exports.DocumentHeader20Regular = exports.DocumentHeader16Filled = exports.DocumentHeader16Regular = exports.DocumentHeaderRegular = exports.DocumentHeaderFilled = void 0;
+const createFluentFontIcon_1 = require("../../utils/fonts/createFluentFontIcon");
+exports.DocumentHeaderFilled = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentHeaderFilled", "", 2, undefined));
+exports.DocumentHeaderRegular = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentHeaderRegular", "", 2, undefined));
+exports.DocumentHeader16Regular = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentHeader16Regular", "", 1, 16));
+exports.DocumentHeader16Filled = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentHeader16Filled", "", 0, 16));
+exports.DocumentHeader20Regular = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentHeader20Regular", "", 1, 20));
+exports.DocumentHeader20Filled = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentHeader20Filled", "", 0, 20));
+exports.DocumentHeader24Regular = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentHeader24Regular", "", 1, 24));
+exports.DocumentHeader24Filled = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentHeader24Filled", "", 0, 24));

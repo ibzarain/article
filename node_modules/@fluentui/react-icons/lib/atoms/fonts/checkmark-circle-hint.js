@@ -1,0 +1,10 @@
+"use client";
+import { createFluentFontIcon } from '../../utils/fonts/createFluentFontIcon';
+export const CheckmarkCircleHintFilled = ( /*#__PURE__*/createFluentFontIcon("CheckmarkCircleHintFilled", "", 2, undefined));
+export const CheckmarkCircleHintRegular = ( /*#__PURE__*/createFluentFontIcon("CheckmarkCircleHintRegular", "", 2, undefined));
+export const CheckmarkCircleHint16Regular = ( /*#__PURE__*/createFluentFontIcon("CheckmarkCircleHint16Regular", "󰨞", 1, 16));
+export const CheckmarkCircleHint16Filled = ( /*#__PURE__*/createFluentFontIcon("CheckmarkCircleHint16Filled", "󰪚", 0, 16));
+export const CheckmarkCircleHint20Regular = ( /*#__PURE__*/createFluentFontIcon("CheckmarkCircleHint20Regular", "󰨟", 1, 20));
+export const CheckmarkCircleHint20Filled = ( /*#__PURE__*/createFluentFontIcon("CheckmarkCircleHint20Filled", "󰪛", 0, 20));
+export const CheckmarkCircleHint24Regular = ( /*#__PURE__*/createFluentFontIcon("CheckmarkCircleHint24Regular", "󰨠", 1, 24));
+export const CheckmarkCircleHint24Filled = ( /*#__PURE__*/createFluentFontIcon("CheckmarkCircleHint24Filled", "󰪜", 0, 24));

@@ -1,0 +1,13 @@
+"use client";
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.WindowNew24Filled = exports.WindowNew24Regular = exports.WindowNew20Filled = exports.WindowNew20Regular = exports.WindowNew16Filled = exports.WindowNew16Regular = exports.WindowNewRegular = exports.WindowNewFilled = void 0;
+const createFluentFontIcon_1 = require("../../utils/fonts/createFluentFontIcon");
+exports.WindowNewFilled = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("WindowNewFilled", "", 2, undefined));
+exports.WindowNewRegular = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("WindowNewRegular", "", 2, undefined));
+exports.WindowNew16Regular = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("WindowNew16Regular", "", 1, 16));
+exports.WindowNew16Filled = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("WindowNew16Filled", "", 0, 16));
+exports.WindowNew20Regular = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("WindowNew20Regular", "", 1, 20));
+exports.WindowNew20Filled = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("WindowNew20Filled", "", 0, 20));
+exports.WindowNew24Regular = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("WindowNew24Regular", "", 1, 24));
+exports.WindowNew24Filled = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("WindowNew24Filled", "", 0, 24));

@@ -1,0 +1,10 @@
+"use client";
+import { createFluentFontIcon } from '../../utils/fonts/createFluentFontIcon';
+export const DocumentOnePageMultipleFilled = ( /*#__PURE__*/createFluentFontIcon("DocumentOnePageMultipleFilled", "", 2, undefined));
+export const DocumentOnePageMultipleRegular = ( /*#__PURE__*/createFluentFontIcon("DocumentOnePageMultipleRegular", "", 2, undefined));
+export const DocumentOnePageMultiple16Regular = ( /*#__PURE__*/createFluentFontIcon("DocumentOnePageMultiple16Regular", "󰅺", 1, 16));
+export const DocumentOnePageMultiple16Filled = ( /*#__PURE__*/createFluentFontIcon("DocumentOnePageMultiple16Filled", "󰅺", 0, 16));
+export const DocumentOnePageMultiple20Regular = ( /*#__PURE__*/createFluentFontIcon("DocumentOnePageMultiple20Regular", "󰅻", 1, 20));
+export const DocumentOnePageMultiple20Filled = ( /*#__PURE__*/createFluentFontIcon("DocumentOnePageMultiple20Filled", "󰅻", 0, 20));
+export const DocumentOnePageMultiple24Regular = ( /*#__PURE__*/createFluentFontIcon("DocumentOnePageMultiple24Regular", "󰅼", 1, 24));
+export const DocumentOnePageMultiple24Filled = ( /*#__PURE__*/createFluentFontIcon("DocumentOnePageMultiple24Filled", "󰅼", 0, 24));

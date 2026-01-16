@@ -1,0 +1,11 @@
+"use client";
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.DocumentTextExtract24Filled = exports.DocumentTextExtract24Regular = exports.DocumentTextExtract20Filled = exports.DocumentTextExtract20Regular = exports.DocumentTextExtractRegular = exports.DocumentTextExtractFilled = void 0;
+const createFluentFontIcon_1 = require("../../utils/fonts/createFluentFontIcon");
+exports.DocumentTextExtractFilled = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentTextExtractFilled", "", 2, undefined));
+exports.DocumentTextExtractRegular = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentTextExtractRegular", "", 2, undefined));
+exports.DocumentTextExtract20Regular = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentTextExtract20Regular", "", 1, 20));
+exports.DocumentTextExtract20Filled = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentTextExtract20Filled", "", 0, 20));
+exports.DocumentTextExtract24Regular = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentTextExtract24Regular", "", 1, 24));
+exports.DocumentTextExtract24Filled = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentTextExtract24Filled", "", 0, 24));

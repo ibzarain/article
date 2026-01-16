@@ -1,0 +1,13 @@
+"use client";
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.DocumentOnePageMultiple24Filled = exports.DocumentOnePageMultiple24Regular = exports.DocumentOnePageMultiple20Filled = exports.DocumentOnePageMultiple20Regular = exports.DocumentOnePageMultiple16Filled = exports.DocumentOnePageMultiple16Regular = exports.DocumentOnePageMultipleRegular = exports.DocumentOnePageMultipleFilled = void 0;
+const createFluentFontIcon_1 = require("../../utils/fonts/createFluentFontIcon");
+exports.DocumentOnePageMultipleFilled = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentOnePageMultipleFilled", "", 2, undefined));
+exports.DocumentOnePageMultipleRegular = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentOnePageMultipleRegular", "", 2, undefined));
+exports.DocumentOnePageMultiple16Regular = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentOnePageMultiple16Regular", "󰅺", 1, 16));
+exports.DocumentOnePageMultiple16Filled = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentOnePageMultiple16Filled", "󰅺", 0, 16));
+exports.DocumentOnePageMultiple20Regular = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentOnePageMultiple20Regular", "󰅻", 1, 20));
+exports.DocumentOnePageMultiple20Filled = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentOnePageMultiple20Filled", "󰅻", 0, 20));
+exports.DocumentOnePageMultiple24Regular = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentOnePageMultiple24Regular", "󰅼", 1, 24));
+exports.DocumentOnePageMultiple24Filled = ( /*#__PURE__*/createFluentFontIcon_1.createFluentFontIcon("DocumentOnePageMultiple24Filled", "󰅼", 0, 24));
