@@ -12,7 +12,6 @@ import {
   Divider,
 } from "@fluentui/react-components";
 import { SendRegular, SparkleFilled } from "@fluentui/react-icons";
-import { Agent } from "ai";
 import { generateAgentResponse } from "../agent/wordAgent";
 import DiffView from "./DiffView";
 import { createChangeTracker } from "../utils/changeTracker";
@@ -20,7 +19,7 @@ import { DocumentChange, ChangeTracking } from "../types/changes";
 import { setChangeTracker } from "../tools/wordEditWithTracking";
 
 interface AgentChatProps {
-  agent: Agent;
+  agent: ReturnType<typeof import("../agent/wordAgent").createWordAgent>;
 }
 
 interface Message {

@@ -34,7 +34,7 @@ export const readDocumentTool = tool({
           }
           range = searchResults.items[0].getRange('Start');
         } else {
-          range = context.document.body;
+          range = context.document.body.getRange('Whole');
         }
         
         context.load(range, 'text');

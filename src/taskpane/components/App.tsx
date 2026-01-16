@@ -3,10 +3,10 @@ import { useState, useMemo } from "react";
 import TextInsertion from "./TextInsertion";
 import AgentChat from "./AgentChat";
 import ApiKeyConfig from "./ApiKeyConfig";
-import { makeStyles, tokens, Tabs, Tab } from "@fluentui/react-components";
+import { makeStyles, tokens, Button } from "@fluentui/react-components";
 import { insertText } from "../taskpane";
 import { createWordAgent } from "../agent/wordAgent";
-import { Agent } from "ai";
+// Agent type will be inferred from createWordAgent return type
 
 interface AppProps {
   title: string;
@@ -26,8 +26,18 @@ const useStyles = makeStyles({
     padding: "24px",
     maxWidth: "100%",
   },
-  tabs: {
-    width: "100%",
+  tabContainer: {
+    display: "flex",
+    gap: "8px",
+    marginBottom: "16px",
+    borderBottom: `1px solid ${tokens.colorNeutralStroke1}`,
+    paddingBottom: "8px",
+  },
+  tabButton: {
+    minWidth: "120px",
+  },
+  activeTab: {
+    fontWeight: tokens.fontWeightSemibold,
   },
   tabPanel: {
     paddingTop: "16px",
@@ -51,7 +61,7 @@ const App: React.FC<AppProps> = () => {
   const [activeTab, setActiveTab] = useState<"agent" | "manual">("agent");
   const styles = useStyles();
 
-  const agent = useMemo<Agent | null>(() => {
+  const agent = useMemo(() => {
     if (!apiKey) {
       return null;
     }
@@ -72,14 +82,22 @@ const App: React.FC<AppProps> = () => {
   return (
     <div className={styles.root}>
       <div className={styles.container}>
-        <Tabs
-          className={styles.tabs}
-          selectedValue={activeTab}
-          onTabSelect={(_, data) => setActiveTab(data.value as "agent" | "manual")}
-        >
-          <Tab value="agent">AI Agent</Tab>
-          <Tab value="manual">Manual Edit</Tab>
-        </Tabs>
+        <div className={styles.tabContainer}>
+          <Button
+            appearance={activeTab === "agent" ? "primary" : "subtle"}
+            className={styles.tabButton}
+            onClick={() => setActiveTab("agent")}
+          >
+            AI Agent
+          </Button>
+          <Button
+            appearance={activeTab === "manual" ? "primary" : "subtle"}
+            className={styles.tabButton}
+            onClick={() => setActiveTab("manual")}
+          >
+            Manual Edit
+          </Button>
+        </div>
 
         <div className={styles.tabPanel}>
           {activeTab === "agent" ? (

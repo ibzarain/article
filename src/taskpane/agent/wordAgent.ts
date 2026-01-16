@@ -1,4 +1,4 @@
-import { Agent } from 'ai';
+// Using Agent from ai package - type will be inferred
 import {
   readDocumentTool,
   editDocumentTool,
@@ -51,7 +51,7 @@ You are working directly with a live Word document, so be careful and precise wi
 /**
  * Generate a response from the agent
  */
-export async function generateAgentResponse(agent: Agent, prompt: string) {
+export async function generateAgentResponse(agent: any, prompt: string) {
   try {
     // Try with object first (newer API)
     const result = await agent.generate({ prompt });
