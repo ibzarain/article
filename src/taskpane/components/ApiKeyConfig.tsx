@@ -1,13 +1,7 @@
 import * as React from "react";
 import { useState, useEffect } from "react";
 import {
-  Button,
-  Field,
-  Input,
-  tokens,
   makeStyles,
-  MessageBar,
-  MessageBarBody,
 } from "@fluentui/react-components";
 import { KeyRegular, CheckmarkCircleFilled } from "@fluentui/react-icons";
 
@@ -19,27 +13,101 @@ const useStyles = makeStyles({
   container: {
     display: "flex",
     flexDirection: "column",
-    gap: "16px",
+    gap: "20px",
     width: "100%",
     maxWidth: "600px",
     margin: "0 auto",
-    padding: "24px",
+    padding: "40px 24px",
+    backgroundColor: "#1e1e1e",
+    color: "#cccccc",
   },
   field: {
     width: "100%",
   },
+  label: {
+    fontSize: "13px",
+    fontWeight: "600",
+    color: "#cccccc",
+    marginBottom: "8px",
+    display: "block",
+  },
   input: {
     width: "100%",
+    padding: "10px 14px",
+    fontSize: "14px",
+    backgroundColor: "#252526",
+    color: "#cccccc",
+    border: "1px solid #3e3e42",
+    borderRadius: "6px",
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+    "&:focus": {
+      outline: "none",
+      borderColor: "#007acc",
+      boxShadow: "0 0 0 1px #007acc",
+    },
+    "&::placeholder": {
+      color: "#6a6a6a",
+    },
+    "&:disabled": {
+      opacity: 0.5,
+      cursor: "not-allowed",
+    },
+  },
+  helperText: {
+    fontSize: "12px",
+    color: "#858585",
+    marginTop: "6px",
+    lineHeight: "1.5",
+    "& code": {
+      backgroundColor: "#252526",
+      padding: "2px 6px",
+      borderRadius: "3px",
+      fontFamily: "monospace",
+      fontSize: "11px",
+    },
+    "& a": {
+      color: "#007acc",
+      textDecoration: "none",
+      "&:hover": {
+        textDecoration: "underline",
+      },
+    },
   },
   button: {
-    minWidth: "120px",
+    minWidth: "140px",
+    padding: "10px 20px",
+    fontSize: "14px",
+    fontWeight: "500",
+    backgroundColor: "#007acc",
+    color: "#ffffff",
+    border: "none",
+    borderRadius: "6px",
+    cursor: "pointer",
+    transition: "all 0.2s ease",
+    "&:hover:not(:disabled)": {
+      backgroundColor: "#005a9e",
+    },
+    "&:disabled": {
+      opacity: 0.5,
+      cursor: "not-allowed",
+    },
   },
   messageBar: {
-    marginTop: "8px",
+    marginTop: "12px",
+    padding: "10px 14px",
+    borderRadius: "6px",
+    fontSize: "13px",
+    display: "flex",
+    alignItems: "center",
+  },
+  successMessage: {
+    backgroundColor: "#1e4620",
+    color: "#89d185",
+    border: "1px solid #2d5a2f",
   },
   successIcon: {
-    color: tokens.colorPaletteGreenForeground1,
     marginRight: "8px",
+    fontSize: "16px",
   },
 });
 
@@ -86,8 +154,9 @@ const ApiKeyConfig: React.FC<ApiKeyConfigProps> = ({ onApiKeySet }) => {
 
   return (
     <div className={styles.container}>
-      <Field label="OpenAI API Key" className={styles.field}>
-        <Input
+      <div className={styles.field}>
+        <label className={styles.label}>OpenAI API Key</label>
+        <input
           type="password"
           className={styles.input}
           value={apiKey}
@@ -100,7 +169,7 @@ const ApiKeyConfig: React.FC<ApiKeyConfigProps> = ({ onApiKeySet }) => {
             }
           }}
         />
-        <div style={{ marginTop: "8px", fontSize: tokens.fontSizeBase200, color: tokens.colorNeutralForeground3 }}>
+        <div className={styles.helperText}>
           {((process.env as any).OPENAI_API_KEY ? (
             <>
               <strong>Using API key from .env file.</strong> To change it, update your .env file and restart the dev server.
@@ -115,31 +184,28 @@ const ApiKeyConfig: React.FC<ApiKeyConfigProps> = ({ onApiKeySet }) => {
               <br />
               <strong>Tip:</strong> You can also add your API key to a <code>.env</code> file in the project root:
               <br />
-              <code style={{ fontSize: tokens.fontSizeBase100 }}>OPENAI_API_KEY=sk-your-key-here</code>
+              <code>OPENAI_API_KEY=sk-your-key-here</code>
             </>
           ))}
         </div>
-      </Field>
+      </div>
 
       {isConfigured && (
-        <MessageBar intent="success" className={styles.messageBar}>
-          <MessageBarBody>
-            <CheckmarkCircleFilled className={styles.successIcon} />
-            API key configured successfully!
-          </MessageBarBody>
-        </MessageBar>
+        <div className={`${styles.messageBar} ${styles.successMessage}`}>
+          <CheckmarkCircleFilled className={styles.successIcon} />
+          API key configured successfully!
+        </div>
       )}
 
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <Button
-          appearance="primary"
+        <button
           disabled={!apiKey.trim() || isConfigured}
           onClick={handleSave}
           className={styles.button}
-          icon={<KeyRegular />}
         >
+          <KeyRegular style={{ fontSize: "16px", marginRight: "6px", verticalAlign: "middle" }} />
           {isConfigured ? "Configured" : "Save API Key"}
-        </Button>
+        </button>
       </div>
     </div>
   );

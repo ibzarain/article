@@ -1,15 +1,9 @@
 import * as React from "react";
 import { useState, useRef, useEffect } from "react";
 import {
-  Button,
-  Textarea,
   tokens,
   makeStyles,
   Spinner,
-  Card,
-  MessageBar,
-  MessageBarBody,
-  Divider,
 } from "@fluentui/react-components";
 import { SendRegular, SparkleFilled } from "@fluentui/react-icons";
 import { generateAgentResponse } from "../agent/wordAgent";
@@ -30,95 +24,161 @@ interface Message {
 const useStyles = makeStyles({
   container: {
     display: "flex",
-    flexDirection: "column",
-    gap: "16px",
     width: "100%",
-    maxWidth: "800px",
-    margin: "0 auto",
     height: "100%",
+    backgroundColor: "#1e1e1e",
+    color: "#cccccc",
+  },
+  chatPanel: {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    backgroundColor: "#1e1e1e",
+    borderRight: "1px solid #3e3e42",
   },
   messagesContainer: {
     flex: 1,
     display: "flex",
     flexDirection: "column",
-    gap: "12px",
+    gap: "16px",
     overflowY: "auto",
-    padding: "16px",
-    backgroundColor: tokens.colorNeutralBackground2,
-    borderRadius: tokens.borderRadiusMedium,
-    minHeight: "400px",
-    maxHeight: "600px",
+    padding: "24px",
+    scrollbarWidth: "thin",
+    scrollbarColor: "#424242 #1e1e1e",
+    "&::-webkit-scrollbar": {
+      width: "8px",
+    },
+    "&::-webkit-scrollbar-track": {
+      background: "#1e1e1e",
+    },
+    "&::-webkit-scrollbar-thumb": {
+      background: "#424242",
+      borderRadius: "4px",
+      "&:hover": {
+        background: "#4e4e4e",
+      },
+    },
   },
   message: {
     display: "flex",
     flexDirection: "column",
-    gap: "4px",
+    gap: "8px",
+    maxWidth: "85%",
   },
   userMessage: {
     alignSelf: "flex-end",
-    maxWidth: "80%",
   },
   assistantMessage: {
     alignSelf: "flex-start",
-    maxWidth: "80%",
   },
-  messageCard: {
+  messageBubble: {
     padding: "12px 16px",
+    borderRadius: "8px",
+    fontSize: "14px",
+    lineHeight: "1.5",
+    wordWrap: "break-word",
   },
-  userCard: {
-    backgroundColor: tokens.colorBrandBackground2,
-    color: tokens.colorBrandForeground2,
+  userBubble: {
+    backgroundColor: "#007acc",
+    color: "#ffffff",
+    borderBottomRightRadius: "4px",
   },
-  assistantCard: {
-    backgroundColor: tokens.colorNeutralBackground1,
-    border: `1px solid ${tokens.colorNeutralStroke1}`,
+  assistantBubble: {
+    backgroundColor: "#252526",
+    color: "#cccccc",
+    border: "1px solid #3e3e42",
+    borderBottomLeftRadius: "4px",
   },
   inputContainer: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "8px",
+    padding: "16px 24px",
+    borderTop: "1px solid #3e3e42",
+    backgroundColor: "#252526",
   },
   inputRow: {
     display: "flex",
-    gap: "8px",
+    gap: "12px",
     alignItems: "flex-end",
   },
   textarea: {
     flex: 1,
-    minHeight: "80px",
-    fontFamily: tokens.fontFamilyBase,
-    fontSize: tokens.fontSizeBase300,
+    minHeight: "60px",
+    maxHeight: "200px",
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+    fontSize: "14px",
+    backgroundColor: "#1e1e1e",
+    color: "#cccccc",
+    border: "1px solid #3e3e42",
+    borderRadius: "6px",
+    padding: "12px 16px",
+    resize: "vertical",
+    "&:focus": {
+      outline: "none",
+      borderColor: "#007acc",
+      boxShadow: "0 0 0 1px #007acc",
+    },
+    "&::placeholder": {
+      color: "#6a6a6a",
+    },
   },
   sendButton: {
-    minWidth: "100px",
-    height: "fit-content",
-  },
-  statusBar: {
-    padding: "8px 12px",
-    borderRadius: tokens.borderRadiusMedium,
+    minWidth: "80px",
+    height: "44px",
+    backgroundColor: "#007acc",
+    color: "#ffffff",
+    border: "none",
+    borderRadius: "6px",
+    fontSize: "14px",
+    fontWeight: "500",
+    cursor: "pointer",
+    transition: "all 0.2s ease",
+    "&:hover:not(:disabled)": {
+      backgroundColor: "#005a9e",
+    },
+    "&:disabled": {
+      opacity: 0.5,
+      cursor: "not-allowed",
+    },
   },
   thinking: {
     display: "flex",
     alignItems: "center",
     gap: "8px",
-    color: tokens.colorNeutralForeground3,
-    fontSize: tokens.fontSizeBase200,
+    color: "#858585",
+    fontSize: "13px",
+    fontStyle: "italic",
+    padding: "8px 16px",
   },
   emptyState: {
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    gap: "12px",
-    padding: "40px",
-    color: tokens.colorNeutralForeground3,
+    gap: "16px",
+    padding: "60px 40px",
+    color: "#858585",
     textAlign: "center",
   },
   emptyStateIcon: {
     fontSize: "48px",
+    color: "#007acc",
+    opacity: 0.7,
   },
   emptyStateText: {
-    fontSize: tokens.fontSizeBase400,
+    fontSize: "14px",
+    lineHeight: "1.6",
+    maxWidth: "400px",
+  },
+  divider: {
+    width: "1px",
+    backgroundColor: "#3e3e42",
+    margin: "0",
+  },
+  changesPanel: {
+    width: "380px",
+    display: "flex",
+    flexDirection: "column",
+    backgroundColor: "#252526",
+    borderLeft: "1px solid #3e3e42",
   },
 });
 
@@ -237,89 +297,102 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
 
   return (
     <div className={styles.container}>
-      <div style={{ display: "flex", gap: "16px", height: "100%" }}>
-        <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-          <div className={styles.messagesContainer}>
-            {messages.length === 0 ? (
-              <div className={styles.emptyState}>
-                <SparkleFilled className={styles.emptyStateIcon} />
-                <div className={styles.emptyStateText}>
-                  <strong>AI Document Editor</strong>
-                  <br />
-                  Ask me to edit your Word document! I can read, edit, insert, delete, and format text.
-                  <br />
-                  <br />
+      <div className={styles.chatPanel}>
+        <div className={styles.messagesContainer}>
+          {messages.length === 0 ? (
+            <div className={styles.emptyState}>
+              <SparkleFilled className={styles.emptyStateIcon} />
+              <div className={styles.emptyStateText}>
+                <strong style={{ color: "#ffffff", fontSize: "16px", marginBottom: "8px", display: "block" }}>
+                  AI Document Editor
+                </strong>
+                Ask me to edit your Word document! I can read, edit, insert, delete, and format text.
+                <br />
+                <br />
+                <span style={{ color: "#858585", fontSize: "13px" }}>
                   Try: "Make the first paragraph bold" or "Replace 'hello' with 'hi'"
-                </div>
+                </span>
               </div>
-            ) : (
-              messages.map((message, index) => (
+            </div>
+          ) : (
+            messages.map((message, index) => (
+              <div
+                key={index}
+                className={`${styles.message} ${
+                  message.role === "user" ? styles.userMessage : styles.assistantMessage
+                }`}
+              >
                 <div
-                  key={index}
-                  className={`${styles.message} ${
-                    message.role === "user" ? styles.userMessage : styles.assistantMessage
+                  className={`${styles.messageBubble} ${
+                    message.role === "user" ? styles.userBubble : styles.assistantBubble
                   }`}
                 >
-                  <Card
-                    className={`${styles.messageCard} ${
-                      message.role === "user" ? styles.userCard : styles.assistantCard
-                    }`}
-                  >
-                    {message.content}
-                  </Card>
+                  {message.content}
                 </div>
-              ))
-            )}
-            {isLoading && (
-              <div className={styles.thinking}>
-                <Spinner size="tiny" />
-                <span>Thinking and editing...</span>
               </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-
-          {error && (
-            <MessageBar intent="error">
-              <MessageBarBody>{error}</MessageBarBody>
-            </MessageBar>
+            ))
           )}
-
-          <div className={styles.inputContainer}>
-            <div className={styles.inputRow}>
-              <Textarea
-                className={styles.textarea}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="Ask me to edit your document... (e.g., 'Make the title bold' or 'Replace all instances of X with Y')"
-                disabled={isLoading}
-                resize="vertical"
-              />
-              <Button
-                appearance="primary"
-                disabled={!input.trim() || isLoading}
-                onClick={handleSend}
-                className={styles.sendButton}
-                icon={isLoading ? <Spinner size="tiny" /> : <SendRegular />}
-              >
-                {isLoading ? "Sending..." : "Send"}
-              </Button>
+          {isLoading && (
+            <div className={styles.thinking}>
+              <Spinner size="tiny" />
+              <span>Thinking and editing...</span>
             </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {error && (
+          <div style={{ 
+            padding: "12px 24px", 
+            backgroundColor: "#3a1f1f", 
+            color: "#f48771", 
+            borderTop: "1px solid #5a2f2f",
+            fontSize: "13px"
+          }}>
+            {error}
+          </div>
+        )}
+
+        <div className={styles.inputContainer}>
+          <div className={styles.inputRow}>
+            <textarea
+              className={styles.textarea}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              placeholder="Ask me to edit your document..."
+              disabled={isLoading}
+            />
+            <button
+              disabled={!input.trim() || isLoading}
+              onClick={handleSend}
+              className={styles.sendButton}
+            >
+              {isLoading ? (
+                <Spinner size="tiny" />
+              ) : (
+                <SendRegular style={{ fontSize: "16px" }} />
+              )}
+            </button>
           </div>
         </div>
+      </div>
 
-        <Divider vertical />
+      <div className={styles.divider} />
 
-        <div style={{ width: "350px", display: "flex", flexDirection: "column" }}>
-          <DiffView
-            changes={changes}
-            onAccept={handleAcceptChange}
-            onReject={handleRejectChange}
-            onAcceptAll={handleAcceptAll}
-            onRejectAll={handleRejectAll}
-          />
-        </div>
+      <div className={styles.changesPanel}>
+        <DiffView
+          changes={changes}
+          onAccept={handleAcceptChange}
+          onReject={handleRejectChange}
+          onAcceptAll={handleAcceptAll}
+          onRejectAll={handleRejectAll}
+        />
       </div>
     </div>
   );

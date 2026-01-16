@@ -1,7 +1,7 @@
 import * as React from "react";
 import { createRoot } from "react-dom/client";
 import App from "./components/App";
-import { FluentProvider, webLightTheme } from "@fluentui/react-components";
+import { FluentProvider, webDarkTheme } from "@fluentui/react-components";
 
 /* global document, Office, module, require, HTMLElement, window */
 
@@ -21,7 +21,7 @@ const renderApp = () => {
   }
   try {
     root.render(
-      <FluentProvider theme={webLightTheme}>
+      <FluentProvider theme={webDarkTheme}>
         <App title={title} />
       </FluentProvider>
     );
@@ -91,7 +91,7 @@ if ((module as any).hot) {
     const NextApp = require("./components/App").default;
     if (root) {
       root.render(
-        <FluentProvider theme={webLightTheme}>
+        <FluentProvider theme={webDarkTheme}>
           <NextApp title={title} />
         </FluentProvider>
       );

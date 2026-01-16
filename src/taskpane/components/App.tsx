@@ -3,7 +3,7 @@ import { useState, useMemo } from "react";
 import TextInsertion from "./TextInsertion";
 import AgentChat from "./AgentChat";
 import ApiKeyConfig from "./ApiKeyConfig";
-import { makeStyles, tokens, Button } from "@fluentui/react-components";
+import { makeStyles } from "@fluentui/react-components";
 import { insertText } from "../taskpane";
 import { createWordAgent } from "../agent/wordAgent";
 // Agent type will be inferred from createWordAgent return type
@@ -15,32 +15,53 @@ interface AppProps {
 const useStyles = makeStyles({
   root: {
     minHeight: "100vh",
-    backgroundColor: tokens.colorNeutralBackground1,
+    backgroundColor: "#1e1e1e",
     display: "flex",
     flexDirection: "column",
+    color: "#cccccc",
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
   },
   container: {
     flex: 1,
     display: "flex",
     flexDirection: "column",
-    padding: "24px",
+    padding: "0",
     maxWidth: "100%",
+    height: "100vh",
+    overflow: "hidden",
   },
   tabContainer: {
     display: "flex",
-    gap: "8px",
-    marginBottom: "16px",
-    borderBottom: `1px solid ${tokens.colorNeutralStroke1}`,
-    paddingBottom: "8px",
+    gap: "0",
+    backgroundColor: "#252526",
+    borderBottom: "1px solid #3e3e42",
+    padding: "0 8px",
   },
   tabButton: {
     minWidth: "120px",
+    backgroundColor: "transparent",
+    color: "#cccccc",
+    border: "none",
+    borderRadius: "0",
+    padding: "8px 16px",
+    fontSize: "13px",
+    fontWeight: "400",
+    cursor: "pointer",
+    transition: "all 0.2s ease",
+    ":hover": {
+      backgroundColor: "#2a2d2e",
+    },
   },
   activeTab: {
-    fontWeight: tokens.fontWeightSemibold,
+    backgroundColor: "#1e1e1e",
+    color: "#ffffff",
+    borderBottom: "2px solid #007acc",
   },
   tabPanel: {
-    paddingTop: "16px",
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
   },
 });
 
@@ -83,20 +104,18 @@ const App: React.FC<AppProps> = () => {
     <div className={styles.root}>
       <div className={styles.container}>
         <div className={styles.tabContainer}>
-          <Button
-            appearance={activeTab === "agent" ? "primary" : "subtle"}
-            className={styles.tabButton}
+          <button
+            className={`${styles.tabButton} ${activeTab === "agent" ? styles.activeTab : ""}`}
             onClick={() => setActiveTab("agent")}
           >
             AI Agent
-          </Button>
-          <Button
-            appearance={activeTab === "manual" ? "primary" : "subtle"}
-            className={styles.tabButton}
+          </button>
+          <button
+            className={`${styles.tabButton} ${activeTab === "manual" ? styles.activeTab : ""}`}
             onClick={() => setActiveTab("manual")}
           >
             Manual Edit
-          </Button>
+          </button>
         </div>
 
         <div className={styles.tabPanel}>
