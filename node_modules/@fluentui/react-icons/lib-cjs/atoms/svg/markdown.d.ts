@@ -1,5 +1,0 @@
-import type { FluentIcon } from '../../utils/createFluentIcon';
-export declare const MarkdownFilled: FluentIcon;
-export declare const MarkdownRegular: FluentIcon;
-export declare const Markdown20Regular: FluentIcon;
-export declare const Markdown20Filled: FluentIcon;
