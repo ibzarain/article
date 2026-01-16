@@ -83,8 +83,8 @@ const useStyles = makeStyles({
     borderRadius: "6px",
     transition: "border-color 0.2s ease",
     "&:hover": {
-      borderColor: "#007acc" as const,
-    },
+      borderColor: "#007acc",
+    } as any,
   },
   changeHeader: {
     display: "flex",

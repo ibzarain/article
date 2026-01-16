@@ -42,9 +42,9 @@ const useStyles = makeStyles({
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
     "&:focus": {
       outline: "none",
-      borderColor: "#007acc" as const,
+      borderColor: "#007acc",
       boxShadow: "0 0 0 1px #007acc",
-    },
+    } as any,
     "&::placeholder": {
       color: "#6a6a6a",
     },
