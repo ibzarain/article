@@ -39,7 +39,7 @@ export async function renderInlineDiff(change: DocumentChange): Promise<void> {
         await context.sync();
         
         // Apply strikethrough and red color to old text
-        range.font.strikethrough = true;
+        range.font.strikeThrough = true;
         range.font.color = '#f48771'; // Red color
         range.font.highlightColor = '#5a1d1d'; // Dark red background
         await context.sync();
@@ -129,7 +129,7 @@ export async function renderInlineDiff(change: DocumentChange): Promise<void> {
         await context.sync();
         
         // Apply strikethrough and red color
-        range.font.strikethrough = true;
+        range.font.strikeThrough = true;
         range.font.color = '#f48771';
         range.font.highlightColor = '#5a1d1d';
         await context.sync();
@@ -187,7 +187,7 @@ export async function acceptInlineChange(change: DocumentChange): Promise<void> 
           await context.sync();
           
           // Check if this is our strikethrough old text
-          if (range.text.trim() === change.oldText.trim() && range.font.strikethrough) {
+          if (range.text.trim() === change.oldText.trim() && range.font.strikeThrough) {
             range.delete();
             await context.sync();
             break; // Only remove the first match
@@ -232,7 +232,7 @@ export async function acceptInlineChange(change: DocumentChange): Promise<void> 
           await context.sync();
           
           // Check if this is our strikethrough deleted text
-          if (range.text.trim() === change.oldText.trim() && range.font.strikethrough) {
+          if (range.text.trim() === change.oldText.trim() && range.font.strikeThrough) {
             range.delete();
             await context.sync();
             break;
@@ -288,8 +288,8 @@ export async function rejectInlineChange(change: DocumentChange): Promise<void> 
           await context.sync();
           
           // Check if this is our strikethrough old text
-          if (range.text.trim() === change.oldText.trim() && range.font.strikethrough) {
-            range.font.strikethrough = false;
+          if (range.text.trim() === change.oldText.trim() && range.font.strikeThrough) {
+            range.font.strikeThrough = false;
             range.font.color = null;
             range.font.highlightColor = null;
             await context.sync();
@@ -333,8 +333,8 @@ export async function rejectInlineChange(change: DocumentChange): Promise<void> 
           await context.sync();
           
           // Check if this is our strikethrough deleted text
-          if (range.text.trim() === change.oldText.trim() && range.font.strikethrough) {
-            range.font.strikethrough = false;
+          if (range.text.trim() === change.oldText.trim() && range.font.strikeThrough) {
+            range.font.strikeThrough = false;
             range.font.color = null;
             range.font.highlightColor = null;
             await context.sync();
