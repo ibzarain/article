@@ -5,9 +5,8 @@ import {
   makeStyles,
   Spinner,
 } from "@fluentui/react-components";
-import { SendRegular, SparkleFilled } from "@fluentui/react-icons";
+import { SendRegular, SparkleFilled, CheckmarkCircleFilled, DismissCircleFilled } from "@fluentui/react-icons";
 import { generateAgentResponse } from "../agent/wordAgent";
-import DiffView from "./DiffView";
 import { createChangeTracker } from "../utils/changeTracker";
 import { DocumentChange, ChangeTracking } from "../types/changes";
 import { setChangeTracker } from "../tools/wordEditWithTracking";
@@ -19,11 +18,13 @@ interface AgentChatProps {
 interface Message {
   role: "user" | "assistant";
   content: string;
+  changes?: DocumentChange[];
 }
 
 const useStyles = makeStyles({
   container: {
     display: "flex",
+    flexDirection: "column",
     width: "100%",
     height: "100%",
     backgroundColor: "#1e1e1e",
@@ -35,7 +36,6 @@ const useStyles = makeStyles({
     display: "flex",
     flexDirection: "column",
     backgroundColor: "#1e1e1e",
-    borderRight: "1px solid #3e3e42",
     height: "100%",
     overflow: "hidden",
   },
@@ -92,6 +92,126 @@ const useStyles = makeStyles({
     color: "#cccccc",
     border: "1px solid #3e3e42",
     borderBottomLeftRadius: "4px",
+  },
+  changesSection: {
+    marginTop: "12px",
+    paddingTop: "12px",
+    borderTop: "1px solid #3e3e42",
+  },
+  changesTitle: {
+    fontSize: "12px",
+    fontWeight: "600",
+    color: "#858585",
+    marginBottom: "8px",
+    textTransform: "uppercase",
+    letterSpacing: "0.5px",
+  },
+  changeCard: {
+    padding: "10px",
+    marginBottom: "8px",
+    backgroundColor: "#1e1e1e",
+    border: "1px solid #3e3e42",
+    borderRadius: "6px",
+    fontSize: "12px",
+  },
+  changeHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: "8px",
+  },
+  changeType: {
+    fontSize: "10px",
+    fontWeight: "600",
+    textTransform: "uppercase",
+    padding: "2px 6px",
+    borderRadius: "4px",
+    letterSpacing: "0.5px",
+  },
+  editType: {
+    backgroundColor: "#264f78",
+    color: "#75beff",
+  },
+  insertType: {
+    backgroundColor: "#1e4620",
+    color: "#89d185",
+  },
+  deleteType: {
+    backgroundColor: "#5a1d1d",
+    color: "#f48771",
+  },
+  formatType: {
+    backgroundColor: "#4a148c",
+    color: "#c586c0",
+  },
+  changeDescription: {
+    fontSize: "12px",
+    color: "#cccccc",
+    flex: 1,
+    marginLeft: "8px",
+  },
+  changeActions: {
+    display: "flex",
+    gap: "4px",
+  },
+  actionButton: {
+    padding: "4px",
+    backgroundColor: "transparent",
+    border: "none",
+    borderRadius: "4px",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    transition: "background 0.2s ease",
+    "&:hover": {
+      backgroundColor: "#3e3e42",
+    },
+  },
+  diffContent: {
+    marginTop: "8px",
+    padding: "8px",
+    borderRadius: "4px",
+    fontFamily: "'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace",
+    fontSize: "11px",
+    backgroundColor: "#1a1a1a",
+    border: "1px solid #2d2d30",
+  },
+  oldText: {
+    backgroundColor: "#5a1d1d",
+    color: "#f48771",
+    padding: "4px 8px",
+    borderRadius: "4px",
+    marginBottom: "4px",
+    textDecoration: "line-through",
+    display: "block",
+  },
+  newText: {
+    backgroundColor: "#1e4620",
+    color: "#89d185",
+    padding: "4px 8px",
+    borderRadius: "4px",
+    display: "block",
+  },
+  insertedText: {
+    backgroundColor: "#1e4620",
+    color: "#89d185",
+    padding: "4px 8px",
+    borderRadius: "4px",
+    display: "block",
+  },
+  deletedText: {
+    backgroundColor: "#5a1d1d",
+    color: "#f48771",
+    padding: "4px 8px",
+    borderRadius: "4px",
+    textDecoration: "line-through",
+    display: "block",
+  },
+  formatInfo: {
+    fontSize: "11px",
+    color: "#858585",
+    fontStyle: "italic",
   },
   inputContainer: {
     padding: "16px 24px",
@@ -182,18 +302,6 @@ const useStyles = makeStyles({
     lineHeight: "1.6",
     maxWidth: "400px",
   },
-  divider: {
-    width: "1px",
-    backgroundColor: "#3e3e42",
-    margin: "0",
-  },
-  changesPanel: {
-    width: "380px",
-    display: "flex",
-    flexDirection: "column",
-    backgroundColor: "#252526",
-    borderLeft: "1px solid #3e3e42",
-  },
 });
 
 const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
@@ -204,21 +312,16 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [changeTracker] = useState<ChangeTracking>(() => createChangeTracker());
-  const [changes, setChanges] = useState<DocumentChange[]>([]);
+  const currentMessageChangesRef = useRef<DocumentChange[]>([]);
   const styles = useStyles();
 
   // Set up change tracking callback for the tools
   useEffect(() => {
     setChangeTracker((change: DocumentChange) => {
       changeTracker.addChange(change);
-      // Update state to trigger re-render
-      setChanges([...changeTracker.changes]);
+      // Add to current message's changes
+      currentMessageChangesRef.current.push(change);
     });
-  }, [changeTracker]);
-
-  // Sync changes state with tracker
-  useEffect(() => {
-    setChanges([...changeTracker.changes]);
   }, [changeTracker]);
 
   const scrollToBottom = () => {
@@ -253,6 +356,9 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
       textareaRef.current.style.height = "auto";
     }
 
+    // Clear changes for this new message
+    currentMessageChangesRef.current = [];
+
     // Add user message
     const newMessages: Message[] = [...messages, { role: "user", content: userMessage }];
     setMessages(newMessages);
@@ -261,11 +367,21 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
       // Get response from agent (changes will be tracked automatically via the agent's onChange callback)
       const response = await generateAgentResponse(agent, userMessage);
 
-      // Add assistant response
+      // Get the changes that were made during this response
+      const changesForThisMessage = [...currentMessageChangesRef.current];
+
+      // Add assistant response with changes
       setMessages([
         ...newMessages,
-        { role: "assistant", content: response },
+        { 
+          role: "assistant", 
+          content: response,
+          changes: changesForThisMessage.length > 0 ? changesForThisMessage : undefined
+        },
       ]);
+
+      // Clear the changes ref for next message
+      currentMessageChangesRef.current = [];
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "An error occurred";
       setError(errorMessage);
@@ -276,6 +392,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
           content: `Error: ${errorMessage}`,
         },
       ]);
+      currentMessageChangesRef.current = [];
     } finally {
       setIsLoading(false);
     }
@@ -288,40 +405,80 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
     }
   };
 
-  const handleAcceptChange = async (id: string) => {
+  const handleAcceptChange = async (messageIndex: number, changeId: string) => {
     try {
-      await changeTracker.acceptChange(id);
-      setChanges([...changeTracker.changes]);
+      await changeTracker.acceptChange(changeId);
+      // Update the message to remove the accepted change
+      setMessages(prev => {
+        const updated = [...prev];
+        if (updated[messageIndex]?.changes) {
+          updated[messageIndex] = {
+            ...updated[messageIndex],
+            changes: updated[messageIndex].changes!.filter(c => c.id !== changeId)
+          };
+        }
+        return updated;
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to accept change");
     }
   };
 
-  const handleRejectChange = async (id: string) => {
+  const handleRejectChange = async (messageIndex: number, changeId: string) => {
     try {
-      await changeTracker.rejectChange(id);
-      setChanges([...changeTracker.changes]);
+      await changeTracker.rejectChange(changeId);
+      // Update the message to remove the rejected change
+      setMessages(prev => {
+        const updated = [...prev];
+        if (updated[messageIndex]?.changes) {
+          updated[messageIndex] = {
+            ...updated[messageIndex],
+            changes: updated[messageIndex].changes!.filter(c => c.id !== changeId)
+          };
+        }
+        return updated;
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to reject change");
     }
   };
 
-  const handleAcceptAll = async () => {
-    try {
-      await changeTracker.acceptAll();
-      setChanges([...changeTracker.changes]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to accept all changes");
+  const getTypeClass = (type: DocumentChange["type"]) => {
+    switch (type) {
+      case "edit":
+        return styles.editType;
+      case "insert":
+        return styles.insertType;
+      case "delete":
+        return styles.deleteType;
+      case "format":
+        return styles.formatType;
+      default:
+        return "";
     }
   };
 
-  const handleRejectAll = async () => {
-    try {
-      await changeTracker.rejectAll();
-      setChanges([...changeTracker.changes]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to reject all changes");
+  const formatChangeDescription = (change: DocumentChange): string => {
+    if (change.type === "format" && change.formatChanges) {
+      const formatParts: string[] = [];
+      if (change.formatChanges.bold !== undefined) {
+        formatParts.push(change.formatChanges.bold ? "bold" : "not bold");
+      }
+      if (change.formatChanges.italic !== undefined) {
+        formatParts.push(change.formatChanges.italic ? "italic" : "not italic");
+      }
+      if (change.formatChanges.underline !== undefined) {
+        formatParts.push(change.formatChanges.underline ? "underlined" : "not underlined");
+      }
+      if (change.formatChanges.fontSize !== undefined) {
+        formatParts.push(`font size ${change.formatChanges.fontSize}pt`);
+      }
+      if (change.formatChanges.fontColor !== undefined) {
+        formatParts.push(`color ${change.formatChanges.fontColor}`);
+      }
+      return formatParts.join(", ");
     }
+    return change.description;
   };
 
   return (
@@ -357,6 +514,75 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                   }`}
                 >
                   {message.content}
+                  {message.changes && message.changes.length > 0 && (
+                    <div className={styles.changesSection}>
+                      <div className={styles.changesTitle}>
+                        Changes ({message.changes.length})
+                      </div>
+                      {message.changes.map((change) => (
+                        <div key={change.id} className={styles.changeCard}>
+                          <div className={styles.changeHeader}>
+                            <div style={{ display: "flex", alignItems: "center", flex: 1 }}>
+                              <span className={`${styles.changeType} ${getTypeClass(change.type)}`}>
+                                {change.type}
+                              </span>
+                              <div className={styles.changeDescription}>
+                                {formatChangeDescription(change)}
+                              </div>
+                            </div>
+                            <div className={styles.changeActions}>
+                              <button
+                                className={styles.actionButton}
+                                onClick={() => handleAcceptChange(index, change.id)}
+                                title="Accept change"
+                              >
+                                <CheckmarkCircleFilled style={{ fontSize: "14px", color: "#89d185" }} />
+                              </button>
+                              <button
+                                className={styles.actionButton}
+                                onClick={() => handleRejectChange(index, change.id)}
+                                title="Reject change"
+                              >
+                                <DismissCircleFilled style={{ fontSize: "14px", color: "#f48771" }} />
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className={styles.diffContent}>
+                            {change.type === "edit" && (
+                              <>
+                                {change.oldText && (
+                                  <div className={styles.oldText}>
+                                    <span style={{ opacity: 0.7 }}>−</span> {change.oldText}
+                                  </div>
+                                )}
+                                {change.newText && (
+                                  <div className={styles.newText}>
+                                    <span style={{ opacity: 0.7 }}>+</span> {change.newText}
+                                  </div>
+                                )}
+                              </>
+                            )}
+                            {change.type === "insert" && change.newText && (
+                              <div className={styles.insertedText}>
+                                <span style={{ opacity: 0.7 }}>+</span> {change.newText}
+                              </div>
+                            )}
+                            {change.type === "delete" && change.oldText && (
+                              <div className={styles.deletedText}>
+                                <span style={{ opacity: 0.7 }}>−</span> {change.oldText}
+                              </div>
+                            )}
+                            {change.type === "format" && (
+                              <div className={styles.formatInfo}>
+                                Applied formatting to: "{change.searchText}"
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             ))
@@ -413,18 +639,6 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
             </button>
           </div>
         </div>
-      </div>
-
-      <div className={styles.divider} />
-
-      <div className={styles.changesPanel}>
-        <DiffView
-          changes={changes}
-          onAccept={handleAcceptChange}
-          onReject={handleRejectChange}
-          onAcceptAll={handleAcceptAll}
-          onRejectAll={handleRejectAll}
-        />
       </div>
     </div>
   );
