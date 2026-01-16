@@ -194,13 +194,8 @@ export const insertTextTool = tool({
           context.load(newParagraph, ['listItem']);
           await context.sync();
           
-          // Apply the same list formatting
-          if (listObject) {
-            context.load(listObject);
-            await context.sync();
-            newParagraph.listItem = targetParagraph.listItem;
-            await context.sync();
-          }
+          // List formatting should be preserved automatically when inserting after a list item
+          // Note: listItem is read-only, so we can't set it directly
           
           insertedRange = newParagraph.getRange();
         } else if (location === 'after' && targetParagraph) {
@@ -262,9 +257,8 @@ export const deleteTextTool = tool({
     deleteAll: z.boolean().optional().default(false).describe('If true, deletes all occurrences. If false, deletes only the first occurrence.'),
     matchCase: z.boolean().optional().default(false).describe('Whether the search should be case-sensitive'),
     matchWholeWord: z.boolean().optional().default(false).describe('Whether to match whole words only'),
-    deleteParagraph: z.boolean().optional().describe('If true, deletes the entire paragraph containing the text. If false or not specified, only deletes the matched text.'),
   }),
-  execute: async ({ searchText, deleteAll, matchCase, matchWholeWord, deleteParagraph }) => {
+  execute: async ({ searchText, deleteAll, matchCase, matchWholeWord }) => {
     try {
       const result = await Word.run(async (context) => {
         const searchResults = context.document.body.search(searchText, {
