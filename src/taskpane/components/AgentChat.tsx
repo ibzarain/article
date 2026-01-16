@@ -113,7 +113,7 @@ const useStyles = makeStyles({
     resize: "vertical",
     "&:focus": {
       outline: "none",
-      borderColor: "#007acc",
+      borderColor: "#007acc" as const,
       boxShadow: "0 0 0 1px #007acc",
     },
     "&::placeholder": {
