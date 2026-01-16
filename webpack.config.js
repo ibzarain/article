@@ -68,6 +68,7 @@ module.exports = async (env, options) => {
         path: "./.env",
         safe: false,
         systemvars: true,
+        silent: true, // Suppress "Failed to load .env" warning
       }),
       new HtmlWebpackPlugin({
         filename: "taskpane.html",
