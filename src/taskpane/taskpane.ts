@@ -1,6 +1,6 @@
 /* global Word console */
 
-export async function insertText(text: string, searchText: string) {
+export async function insertText(text: string, searchText: string): Promise<void> {
   try {
     await Word.run(async (context) => {
       // Search for the text in the document (case-insensitive)
@@ -13,8 +13,7 @@ export async function insertText(text: string, searchText: string) {
       await context.sync();
       
       if (searchResults.items.length === 0) {
-        console.log("Text not found in document");
-        return;
+        throw new Error(`Text "${searchText}" not found in document`);
       }
       
       // Get the first occurrence
@@ -27,6 +26,7 @@ export async function insertText(text: string, searchText: string) {
       console.log("Text inserted successfully");
     });
   } catch (error) {
-    console.log("Error: " + error);
+    console.error("Error inserting text:", error);
+    throw error;
   }
 }
