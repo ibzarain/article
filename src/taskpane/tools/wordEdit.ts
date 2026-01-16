@@ -289,7 +289,7 @@ export const formatTextTool = tool({
             font.italic = italic;
           }
           if (underline !== undefined) {
-            font.underline = underline ? 'single' : 'none';
+            font.underline = underline ? Word.UnderlineType.single : Word.UnderlineType.none;
           }
           if (fontSize !== undefined) {
             font.size = fontSize;

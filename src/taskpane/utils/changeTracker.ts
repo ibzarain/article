@@ -92,7 +92,7 @@ export function createChangeTracker(): ChangeTracking {
               font.italic = !change.formatChanges.italic;
             }
             if (change.formatChanges.underline !== undefined) {
-              font.underline = change.formatChanges.underline ? 'none' : 'single';
+              font.underline = change.formatChanges.underline ? Word.UnderlineType.none : Word.UnderlineType.single;
             }
             await context.sync();
           }
