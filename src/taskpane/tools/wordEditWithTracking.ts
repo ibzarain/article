@@ -242,9 +242,9 @@ export const deleteTextTool = tool({
  * Tool to format text in the Word document (with change tracking)
  */
 export const formatTextTool = tool({
-  description: 'Format text in the Word document. Finds text and applies formatting like bold, italic, font size, color, etc.',
+  description: 'Format text in the Word document. Finds text and applies formatting like bold, italic, font size, color, etc. Use searchText: "*" or "all" to format the entire document. Use searchText: "beginning" or "end" to format text at those locations.',
   parameters: z.object({
-    searchText: z.string().describe('The text to find and format'),
+    searchText: z.string().describe('The text to find and format. Use "*" or "all" to format the entire document. Use "beginning" or "end" for those locations.'),
     bold: z.boolean().optional().describe('Make the text bold'),
     italic: z.boolean().optional().describe('Make the text italic'),
     underline: z.boolean().optional().describe('Underline the text'),
@@ -256,19 +256,38 @@ export const formatTextTool = tool({
   execute: async ({ searchText, bold, italic, underline, fontSize, fontColor, highlightColor, formatAll }) => {
     try {
       const result = await Word.run(async (context) => {
-        const searchResults = context.document.body.search(searchText, {
-          matchCase: false,
-          matchWholeWord: false,
-        });
+        let itemsToFormat: Word.Range[] = [];
         
-        context.load(searchResults, 'items');
-        await context.sync();
-        
-        if (searchResults.items.length === 0) {
-          throw new Error(`Text "${searchText}" not found in document`);
+        // Handle special cases: "*", "all", "beginning", "end"
+        if (searchText === '*' || searchText.toLowerCase() === 'all') {
+          // Format entire document
+          const bodyRange = context.document.body.getRange('Whole');
+          itemsToFormat = [bodyRange];
+        } else if (searchText.toLowerCase() === 'beginning') {
+          // Format from beginning
+          const startRange = context.document.body.getRange('Start');
+          itemsToFormat = [startRange];
+        } else if (searchText.toLowerCase() === 'end') {
+          // Format from end
+          const endRange = context.document.body.getRange('End');
+          itemsToFormat = [endRange];
+        } else {
+          // Normal search
+          const searchResults = context.document.body.search(searchText, {
+            matchCase: false,
+            matchWholeWord: false,
+          });
+          
+          context.load(searchResults, 'items');
+          await context.sync();
+          
+          if (searchResults.items.length === 0) {
+            throw new Error(`Text "${searchText}" not found in document`);
+          }
+          
+          itemsToFormat = formatAll ? searchResults.items : [searchResults.items[0]];
         }
         
-        const itemsToFormat = formatAll ? searchResults.items : [searchResults.items[0]];
         let formattedCount = 0;
         
         const formatChanges: DocumentChange['formatChanges'] = {};
@@ -308,9 +327,13 @@ export const formatTextTool = tool({
         
         // Track the change
         if (formattedCount > 0) {
+          const description = searchText === '*' || searchText.toLowerCase() === 'all'
+            ? 'Formatted entire document'
+            : `Formatted "${searchText}"`;
+            
           trackChange({
             type: 'format',
-            description: `Formatted "${searchText}"`,
+            description,
             searchText: searchText,
             formatChanges: formatChanges,
           });
@@ -318,7 +341,7 @@ export const formatTextTool = tool({
         
         return {
           formatted: formattedCount,
-          totalFound: searchResults.items.length,
+          totalFound: itemsToFormat.length,
         };
       });
       
@@ -326,7 +349,7 @@ export const formatTextTool = tool({
         success: true,
         formatted: result.formatted,
         totalFound: result.totalFound,
-        message: `Formatted ${result.formatted} occurrence(s) of "${searchText}"`,
+        message: `Formatted ${result.formatted} occurrence(s)`,
       };
     } catch (error) {
       return {
