@@ -1,4 +1,3 @@
-// Using Agent from ai package - type will be inferred
 import {
   readDocumentTool,
   editDocumentTool,
@@ -8,18 +7,17 @@ import {
 } from '../tools/wordEditWithTracking';
 
 /**
- * Creates and configures an AI agent with Word document editing tools
+ * Creates and configures an AI agent configuration with Word document editing tools
+ * Uses the AI SDK's generateText with tools
  */
 export function createWordAgent(
   apiKey: string,
   model: string = 'gpt-4o-mini'
 ) {
-  const agent = new Agent({
-    model: {
-      provider: 'openai',
-      name: model,
-      apiKey,
-    },
+  // Return an agent configuration object
+  return {
+    apiKey,
+    model,
     tools: {
       readDocument: readDocumentTool,
       editDocument: editDocumentTool,
@@ -43,27 +41,31 @@ When a user asks you to edit the document:
 6. Always confirm what changes you've made
 
 You are working directly with a live Word document, so be careful and precise with your edits.`,
-  });
-
-  return agent;
+  };
 }
 
 /**
- * Generate a response from the agent
+ * Generate a response from the agent using generateText
  */
 export async function generateAgentResponse(agent: any, prompt: string) {
   try {
-    // Try with object first (newer API)
-    const result = await agent.generate({ prompt });
+    const { generateText } = await import('ai');
+    const { createOpenAI } = await import('ai/openai');
+    
+    const openai = createOpenAI({
+      apiKey: agent.apiKey,
+    });
+    
+    const result = await generateText({
+      model: openai(agent.model),
+      tools: agent.tools,
+      system: agent.system,
+      prompt,
+    });
+    
     return result.text || 'No response generated.';
   } catch (error) {
-    // Fallback to string if object doesn't work
-    try {
-      const result = await (agent as any).generate(prompt);
-      return result.text || result || 'No response generated.';
-    } catch (err2) {
-      console.error('Agent generate error:', err2);
-      throw err2;
-    }
+    console.error('Agent generate error:', error);
+    throw error;
   }
 }
