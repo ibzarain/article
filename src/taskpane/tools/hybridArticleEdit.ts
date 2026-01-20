@@ -302,9 +302,22 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
               }
               
               // If still not found, try without punctuation at the end
-              if (searchResults.items.length === 0 && /[.:;]/.test(searchText)) {
-                const withoutPunct = searchText.replace(/[.:;]+$/, '');
-                searchResults = articleRange.search(withoutPunct, {
+              if (searchResults.items.length === 0 && searchText && /[.:;]/.test(searchText)) {
+                const withoutPunct = searchText.replace(/[.:;]+$/, '').trim();
+                if (withoutPunct && withoutPunct !== searchText) {
+                  searchResults = articleRange.search(withoutPunct, {
+                    matchCase: false,
+                    matchWholeWord: false,
+                  });
+                  context.load(searchResults, 'items');
+                  await context.sync();
+                }
+              }
+              
+              // Also try with punctuation added if original didn't have it
+              if (searchResults.items.length === 0 && searchText && !/[.:;]$/.test(searchText)) {
+                const withPunct = searchText + ':';
+                searchResults = articleRange.search(withPunct, {
                   matchCase: false,
                   matchWholeWord: false,
                 });
@@ -331,12 +344,16 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
               // Get paragraph text to check context
               context.load(targetParagraph, 'text');
               await context.sync();
-              const paragraphText = targetParagraph.text;
+              const paragraphText = targetParagraph.text || '';
               
               // Check if the found text is at the very beginning of the paragraph
               // (allowing for minimal whitespace)
-              const foundTextStart = paragraphText.toLowerCase().indexOf(searchText.toLowerCase());
-              const textBeforeMatch = paragraphText.substring(0, foundTextStart).trim();
+              // Use the actual found text from the range, not searchText (which might have different punctuation)
+              context.load(foundRange, 'text');
+              await context.sync();
+              const actualFoundText = foundRange.text || '';
+              const foundTextStart = paragraphText.toLowerCase().indexOf(actualFoundText.toLowerCase());
+              const textBeforeMatch = foundTextStart >= 0 ? paragraphText.substring(0, foundTextStart).trim() : '';
               
               if (location === 'inline') {
                 // Inline: insert right after the found text (within the sentence)
