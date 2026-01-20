@@ -14,28 +14,47 @@ export function setHybridArticleChangeTracker(tracker: (change: DocumentChange) 
 
 /**
  * Creates a scoped readDocument tool that only reads content within article boundaries
+ * This is a proper search tool that returns matches with context snippets
  */
 function createScopedReadDocumentTool(articleBoundaries: ArticleBoundaries) {
   return {
-    description: 'Read text content from the Word document. This tool is scoped to only read content within the current article section.',
+    description: 'Search ARTICLE content for a query and return contextual snippets around each match. This is a SEARCH tool - use it to find exact text before editing. Returns matches with snippets showing context.',
     parameters: {
       type: 'object',
       properties: {
-        startLocation: {
+        query: {
           type: 'string',
-          description: 'Optional: Start location to read from (e.g., "beginning", "end", or search text)',
+          description: 'Text to search for in the article. This is a search query - use it to find exact text before making edits.',
         },
-        length: {
+        contextChars: {
           type: 'number',
-          description: 'Optional: Number of characters to read. If not specified, reads the entire article.',
+          description: 'Number of characters of context to include before and after each match. Default: 800',
+        },
+        maxMatches: {
+          type: 'number',
+          description: 'Optional cap on number of snippets returned',
+        },
+        matchCase: {
+          type: 'boolean',
+          description: 'Whether the search should be case-sensitive. Default: false',
+        },
+        matchWholeWord: {
+          type: 'boolean',
+          description: 'Whether to match whole words only. Default: false',
         },
       },
-      required: [],
+      required: ['query'],
     },
-    execute: async ({ startLocation, length }: { startLocation?: string; length?: number }) => {
+    execute: async ({ query, contextChars = 800, maxMatches, matchCase = false, matchWholeWord = false }: { 
+      query: string; 
+      contextChars?: number; 
+      maxMatches?: number; 
+      matchCase?: boolean; 
+      matchWholeWord?: boolean;
+    }) => {
       try {
         const result = await Word.run(async (context) => {
-          // Get paragraphs for the article
+          // Get article range
           const paragraphs = context.document.body.paragraphs;
           context.load(paragraphs, 'items');
           await context.sync();
@@ -46,47 +65,66 @@ function createScopedReadDocumentTool(articleBoundaries: ArticleBoundaries) {
           const endRange = endParagraph.getRange('End');
           const articleRange = startRange.expandTo(endRange);
           
-          let range: Word.Range;
-          
-          if (startLocation === 'beginning') {
-            range = startRange;
-          } else if (startLocation === 'end') {
-            range = endRange;
-          } else if (startLocation) {
-            // Search within the article range only
-            const searchResults = articleRange.search(startLocation, {
-              matchCase: false,
-              matchWholeWord: false,
-            });
-            context.load(searchResults, 'items');
-            await context.sync();
-            
-            if (searchResults.items.length === 0) {
-              throw new Error(`Location "${startLocation}" not found in article`);
-            }
-            range = searchResults.items[0].getRange('Start');
-          } else {
-            range = articleRange;
-          }
-          
-          context.load(range, 'text');
+          // Get article text for regex search
+          context.load(articleRange, 'text');
           await context.sync();
           
-          let text = range.text;
-          if (length && length > 0) {
-            text = text.substring(0, length);
+          const text = articleRange.text || '';
+          const safeContextChars = Math.max(0, Math.floor(contextChars || 0));
+          const safeMaxMatches = typeof maxMatches === 'number' && maxMatches > 0 ? Math.floor(maxMatches) : undefined;
+
+          // Escape regex special characters
+          const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const escapedQuery = escapeRegExp(query);
+          const pattern = matchWholeWord ? `\\b${escapedQuery}\\b` : escapedQuery;
+          const flags = matchCase ? 'g' : 'gi';
+          const regex = new RegExp(pattern, flags);
+
+          const matches: Array<{
+            matchText: string;
+            snippet: string;
+            matchStart: number;
+            matchEnd: number;
+            snippetStart: number;
+            snippetEnd: number;
+          }> = [];
+
+          let totalFound = 0;
+          let match: RegExpExecArray | null;
+
+          while ((match = regex.exec(text)) !== null) {
+            totalFound++;
+
+            const matchStart = match.index;
+            const matchEnd = matchStart + match[0].length;
+            const snippetStart = Math.max(0, matchStart - safeContextChars);
+            const snippetEnd = Math.min(text.length, matchEnd + safeContextChars);
+
+            if (!safeMaxMatches || matches.length < safeMaxMatches) {
+              matches.push({
+                matchText: match[0],
+                snippet: text.slice(snippetStart, snippetEnd),
+                matchStart,
+                matchEnd,
+                snippetStart,
+                snippetEnd,
+              });
+            }
           }
-          
+
           return {
-            text,
-            length: text.length,
+            matches,
+            totalFound,
+            articleLength: text.length,
           };
         });
         
         return {
           success: true,
-          content: result.text,
-          length: result.length,
+          query,
+          content: result.matches,
+          totalFound: result.totalFound,
+          articleLength: result.articleLength,
         };
       } catch (error) {
         return {
@@ -197,7 +235,7 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
       },
     },
     insertText: {
-      description: 'Insert text into the article at a specific location. Only works within the current article section. CRITICAL: The searchText MUST be the EXACT text the user specified, found via readDocument. Do NOT use a different search text.',
+      description: 'Insert text into the article at a specific location. Only works within the current article section. Use searchText from readDocument results to identify where to insert. The searchText should be unique text near the insertion point - it can be the exact matchText from readDocument or nearby unique text from the snippets.',
       parameters: {
         type: 'object',
         properties: {
@@ -207,7 +245,7 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
             enum: ['before', 'after', 'beginning', 'end', 'inline'],
             description: 'Where to insert: "before" or "after" a search text, "beginning" or "end" of article, or "inline" to insert within the found text',
           },
-          searchText: { type: 'string', description: 'Required if location is "before", "after", or "inline". MUST be the EXACT text the user specified (found via readDocument). Use the exact matchText from readDocument results, including all punctuation and capitalization.' },
+          searchText: { type: 'string', description: 'Required if location is "before", "after", or "inline". Use text from readDocument results that uniquely identifies the insertion point. Can be the matchText or nearby unique text from the snippets.' },
         },
         required: ['text', 'location'],
       },
@@ -239,7 +277,8 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
               }
               
               // Search only within article range
-              const searchResults = articleRange.search(searchText, {
+              // Try multiple search strategies to find the text
+              let searchResults = articleRange.search(searchText, {
                 matchCase: false,
                 matchWholeWord: false,
               });
@@ -247,13 +286,43 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
               context.load(searchResults, 'items');
               await context.sync();
               
+              // If not found, try with different whitespace handling
               if (searchResults.items.length === 0) {
-                throw new Error(`Search text "${searchText}" not found in article. Please verify the exact text exists in ARTICLE ${articleName} using readDocument first.`);
+                // Try trimming the search text
+                const trimmedSearch = searchText.trim();
+                if (trimmedSearch !== searchText) {
+                  searchResults = articleRange.search(trimmedSearch, {
+                    matchCase: false,
+                    matchWholeWord: false,
+                  });
+                  context.load(searchResults, 'items');
+                  await context.sync();
+                }
+              }
+              
+              // If still not found, try without punctuation at the end
+              if (searchResults.items.length === 0 && /[.:;]/.test(searchText)) {
+                const withoutPunct = searchText.replace(/[.:;]+$/, '');
+                searchResults = articleRange.search(withoutPunct, {
+                  matchCase: false,
+                  matchWholeWord: false,
+                });
+                context.load(searchResults, 'items');
+                await context.sync();
+              }
+              
+              if (searchResults.items.length === 0) {
+                // Get article content snippet for better error message
+                context.load(articleRange, 'text');
+                await context.sync();
+                const articlePreview = articleRange.text.substring(0, 500);
+                throw new Error(`Search text "${searchText}" not found in ARTICLE ${articleName}. Searched within article content. Please use readDocument first to find the exact text. Article preview: ${articlePreview}...`);
               }
               
               // Log the search for debugging
-              console.log(`[insertText] Searching for: "${searchText}", found ${searchResults.items.length} match(es)`);
+              console.log(`[insertText] Searching for: "${searchText}", found ${searchResults.items.length} match(es) in ARTICLE ${articleName}`);
               
+              // Use the first match (most relevant)
               const foundRange = searchResults.items[0];
               const targetParagraph = foundRange.paragraphs.getFirst();
               context.load(targetParagraph, ['listItem', 'list', 'text', 'style']);
@@ -469,25 +538,43 @@ CURRENT ARTICLE CONTENT (for reference):
 ${articleContentPreview}
 
 AVAILABLE TOOLS:
-- readDocument: Read text content from ARTICLE ${articleName} only
-- editDocument: Find and replace text within ARTICLE ${articleName} only
-- insertText: Insert new text within ARTICLE ${articleName} only
-- deleteText: Delete text from ARTICLE ${articleName} only
+- readDocument: SEARCH tool - Search ARTICLE ${articleName} for a query and return contextual snippets around each match. Use your intelligence to find the right location - you can search for variations, related phrases, or context. Returns matches with snippets showing context.
+- editDocument: Find and replace text within ARTICLE ${articleName} only. Use searchText from readDocument results.
+- insertText: Insert new text within ARTICLE ${articleName} only. Use searchText from readDocument results to find the insertion point.
+- deleteText: Delete text from ARTICLE ${articleName} only. Use searchText from readDocument results.
 
-CRITICAL RULES:
-1. You MUST only work within ARTICLE ${articleName} - do not attempt to edit content outside this article.
-2. ALWAYS use the tools to make changes - don't just describe what you would do.
-3. MANDATORY: ALWAYS call readDocument FIRST with the EXACT search text the user specified. Then use the EXACT matchText from the readDocument result as searchText for insertText/editDocument/deleteText. NEVER use a different search text than what the user requested.
-4. Use ONE tool call at a time. Wait for the tool result before deciding the next action.
-5. Be PRECISE with searchText: use the EXACT text from readDocument results. If the user says "before 'The Construction Manager shall:'", you MUST search for "The Construction Manager shall:" and use that EXACT text (including punctuation) as searchText.
-6. Use replaceAll/deleteAll only when the user requests it or multiple occurrences must be changed. Otherwise modify only the first match.
-7. For insertText: location "before"/"after"/"inline" requires searchText. Use "inline" only for inserting within a sentence. The searchText MUST be the exact text the user specified, found via readDocument.
-8. If readDocument doesn't find the exact text the user specified, report an error - DO NOT substitute with a different search text. The user's instruction is explicit and must be followed exactly.
+WORKFLOW - USE YOUR AI INTELLIGENCE:
+1. UNDERSTAND the user's instruction semantically. If they say "before 'The Construction Manager shall:'", understand what they mean and where that should be.
+
+2. USE readDocument to FIND the location intelligently:
+   - Search for the text the user mentioned, or variations of it
+   - Look for context clues, related phrases, or semantic matches
+   - Review the snippets to understand the document structure
+   - If the exact text isn't found, try related searches (e.g., "Construction Manager", "shall perform", etc.)
+   - Use your understanding of the document to find the right location
+
+3. Once you've found the right location using readDocument:
+   - Use the matchText or a nearby unique text from the snippets as searchText
+   - Call the appropriate tool (insertText/editDocument/deleteText) with the correct location
+
+4. BE SMART about finding locations:
+   - If user says "before X", search for X and use the match as your insertion point
+   - If exact text isn't found, search for variations or context
+   - Use the snippets to understand where things are in the document
+   - Make intelligent decisions about where to insert/edit based on context
+
+5. ALWAYS use the tools to make changes - don't just describe what you would do.
+
+6. Use ONE tool call at a time. Wait for the tool result before deciding the next action.
+
+7. For insertText: location "before"/"after"/"inline" requires searchText. Use text from readDocument results that uniquely identifies the insertion point.
+
+8. If you cannot find any relevant location after multiple intelligent searches, report what you tried and ask for clarification.
 
 The user has provided the following instructions for ARTICLE ${articleName}:
 ${instruction}
 
-Please execute these instructions by using the available tools.`,
+Use your AI intelligence to understand where to make the changes, then use the tools to execute them.`,
     };
     
     // Generate response using the scoped agent
