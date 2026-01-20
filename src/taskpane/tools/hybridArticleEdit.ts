@@ -264,6 +264,7 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
             
             let insertLocation: Word.InsertLocation;
             let range: Word.Range;
+            let targetParagraph: Word.Paragraph | null = null;
             
             if (location === 'beginning') {
               range = startRange;
@@ -324,16 +325,39 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
               
               // Use the first match (most relevant)
               const foundRange = searchResults.items[0];
-              const targetParagraph = foundRange.paragraphs.getFirst();
+              targetParagraph = foundRange.paragraphs.getFirst();
               context.load(targetParagraph, ['listItem', 'list', 'text', 'style']);
               
+              // Get paragraph text to check context
+              context.load(targetParagraph, 'text');
+              await context.sync();
+              const paragraphText = targetParagraph.text;
+              
+              // Check if the found text is at the very beginning of the paragraph
+              // (allowing for minimal whitespace)
+              const foundTextStart = paragraphText.toLowerCase().indexOf(searchText.toLowerCase());
+              const textBeforeMatch = paragraphText.substring(0, foundTextStart).trim();
+              
               if (location === 'inline') {
+                // Inline: insert right after the found text
                 range = foundRange;
                 insertLocation = Word.InsertLocation.after;
               } else if (location === 'before') {
-                range = foundRange;
-                insertLocation = Word.InsertLocation.before;
+                // "Before" means: insert a new paragraph before the paragraph containing the text
+                // UNLESS the text is in the middle of a sentence, then insert before the text
+                if (textBeforeMatch.length === 0 || textBeforeMatch.length < 5) {
+                  // Text is at or near the start of paragraph - insert new paragraph before this paragraph
+                  range = targetParagraph.getRange('Start');
+                  insertLocation = Word.InsertLocation.before;
+                } else {
+                  // Text is in the middle - this is unusual for "before", but insert before the text
+                  // Actually, for "before" we should still insert a new paragraph before the paragraph
+                  // Let's insert at paragraph start to create a new paragraph
+                  range = targetParagraph.getRange('Start');
+                  insertLocation = Word.InsertLocation.before;
+                }
               } else {
+                // For "after", insert after the paragraph end
                 range = targetParagraph.getRange('End');
                 insertLocation = Word.InsertLocation.after;
               }
@@ -344,7 +368,28 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
             await context.sync();
             
             // Insert the text
-            const insertedRange = range.insertText(text, insertLocation);
+            let insertedRange: Word.Range;
+            
+            // For "before" at paragraph start, insert as a new paragraph
+            if (location === 'before' && targetParagraph) {
+              // Always insert as a new paragraph before the paragraph containing the found text
+              // This ensures "before 'The Construction Manager shall'" creates a new paragraph before that paragraph
+              const newParagraph = targetParagraph.insertParagraph(text, Word.InsertLocation.before);
+              context.load(newParagraph, ['style']);
+              await context.sync();
+              
+              // Preserve paragraph style if it exists
+              if (targetParagraph.style && targetParagraph.style !== 'Normal') {
+                newParagraph.style = targetParagraph.style;
+                await context.sync();
+              }
+              
+              insertedRange = newParagraph.getRange();
+            } else {
+              // Regular text insertion for other cases
+              insertedRange = range.insertText(text, insertLocation);
+            }
+            
             await context.sync();
             
             // Apply green color to inserted text immediately
