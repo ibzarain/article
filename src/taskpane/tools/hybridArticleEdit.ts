@@ -36,6 +36,8 @@ function createScopedReadDocumentTool(articleBoundaries: ArticleBoundaries) {
         const result = await Word.run(async (context) => {
           // Get paragraphs for the article
           const paragraphs = context.document.body.paragraphs;
+          context.load(paragraphs, 'items');
+          await context.sync();
           const startParagraph = paragraphs.items[articleBoundaries.startParagraphIndex];
           const endParagraph = paragraphs.items[articleBoundaries.endParagraphIndex];
           
@@ -118,6 +120,8 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries) {
           const result = await Word.run(async (context) => {
             // Get article range
             const paragraphs = context.document.body.paragraphs;
+            context.load(paragraphs, 'items');
+            await context.sync();
             const startParagraph = paragraphs.items[articleBoundaries.startParagraphIndex];
             const endParagraph = paragraphs.items[articleBoundaries.endParagraphIndex];
             const startRange = startParagraph.getRange('Start');
@@ -205,6 +209,8 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries) {
           const result = await Word.run(async (context) => {
             // Get article range
             const paragraphs = context.document.body.paragraphs;
+            context.load(paragraphs, 'items');
+            await context.sync();
             const startParagraph = paragraphs.items[articleBoundaries.startParagraphIndex];
             const endParagraph = paragraphs.items[articleBoundaries.endParagraphIndex];
             const startRange = startParagraph.getRange('Start');
@@ -311,6 +317,8 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries) {
           const result = await Word.run(async (context) => {
             // Get article range
             const paragraphs = context.document.body.paragraphs;
+            context.load(paragraphs, 'items');
+            await context.sync();
             const startParagraph = paragraphs.items[articleBoundaries.startParagraphIndex];
             const endParagraph = paragraphs.items[articleBoundaries.endParagraphIndex];
             const startRange = startParagraph.getRange('Start');
@@ -441,12 +449,14 @@ AVAILABLE TOOLS:
 - deleteText: Delete text from ARTICLE ${articleName} only
 
 CRITICAL RULES:
-1. You MUST only work within ARTICLE ${articleName} - do not attempt to edit content outside this article
-2. ALWAYS use the tools to make changes - don't just describe what you would do
-3. Be PRECISE with searchText - use unique, specific text that appears exactly where you want to make changes
-4. When inserting text, assess format context to preserve formatting (lists, paragraphs, etc.)
-5. When editing text, automatically preserves all formatting
-6. Use readDocument tool if you need to see the full article content before making edits
+1. You MUST only work within ARTICLE ${articleName} - do not attempt to edit content outside this article.
+2. ALWAYS use the tools to make changes - don't just describe what you would do.
+3. Tool order matters: if the exact text or location is uncertain, call readDocument first and use the returned snippet verbatim as searchText for edits.
+4. Use ONE tool call at a time. Wait for the tool result before deciding the next action.
+5. Be PRECISE with searchText: use unique, specific text from the article. Avoid generic headings like "ARTICLE A-3" unless the user explicitly targets them.
+6. Use replaceAll/deleteAll only when the user requests it or multiple occurrences must be changed. Otherwise modify only the first match.
+7. For insertText: location "before"/"after"/"inline" requires searchText. Use "inline" only for inserting within a sentence.
+8. If a tool reports "not found" or errors, call readDocument to get more context and retry with a refined searchText.
 
 The user has provided the following instructions for ARTICLE ${articleName}:
 ${instruction}
