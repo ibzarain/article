@@ -41,17 +41,14 @@ export async function renderInlineDiff(change: DocumentChange): Promise<void> {
         // Apply strikethrough and red color to old text
         range.font.strikeThrough = true;
         range.font.color = '#f48771'; // Red color
-        range.font.highlightColor = '#5a1d1d'; // Dark red background
         await context.sync();
         
         // Insert new text after old text with green highlighting
         const newRange = range.insertText(` ${newTextDisplay}`, Word.InsertLocation.after);
         await context.sync();
         
-        // Apply green highlighting to new text
+        // Apply green color to new text
         newRange.font.color = '#89d185'; // Green color
-        newRange.font.highlightColor = '#1e4620'; // Dark green background
-        newRange.font.bold = true;
         await context.sync();
         
       } else if (change.type === 'insert' && change.newText) {
@@ -102,10 +99,8 @@ export async function renderInlineDiff(change: DocumentChange): Promise<void> {
         }
         
         if (insertRange) {
-          // Apply green highlighting
+          // Apply green color
           insertRange.font.color = '#89d185';
-          insertRange.font.highlightColor = '#1e4620';
-          insertRange.font.bold = true;
           await context.sync();
         }
         
@@ -131,7 +126,6 @@ export async function renderInlineDiff(change: DocumentChange): Promise<void> {
         // Apply strikethrough and red color
         range.font.strikeThrough = true;
         range.font.color = '#f48771';
-        range.font.highlightColor = '#5a1d1d';
         await context.sync();
       }
     });
@@ -162,13 +156,10 @@ export async function acceptInlineChange(change: DocumentChange): Promise<void> 
           context.load(range, ['text', 'font']);
           await context.sync();
           
-          // Check if this is our highlighted new text
-          if (range.text.trim() === change.newText.trim() && 
-              (range.font.highlightColor === '#1e4620' || range.font.color === '#89d185')) {
-            // Remove highlighting, keep text
-            range.font.highlightColor = null;
+          // Check if this is our highlighted new text (green)
+          if (range.text.trim() === change.newText.trim() && range.font.color === '#89d185') {
+            // Remove green color, keep text with default color
             range.font.color = null;
-            range.font.bold = false;
             await context.sync();
             break; // Only accept the first match
           }
@@ -186,8 +177,9 @@ export async function acceptInlineChange(change: DocumentChange): Promise<void> 
           context.load(range, ['text', 'font']);
           await context.sync();
           
-          // Check if this is our strikethrough old text
-          if (range.text.trim() === change.oldText.trim() && range.font.strikeThrough) {
+          // Check if this is our strikethrough old text (red)
+          if (range.text.trim() === change.oldText.trim() && range.font.strikeThrough && range.font.color === '#f48771') {
+            // Delete the old text (removes red strikethrough)
             range.delete();
             await context.sync();
             break; // Only remove the first match
@@ -207,12 +199,10 @@ export async function acceptInlineChange(change: DocumentChange): Promise<void> 
           context.load(range, ['text', 'font']);
           await context.sync();
           
-          // Check if this is our highlighted inserted text
-          if (range.text.trim() === change.newText.trim() && 
-              (range.font.highlightColor === '#1e4620' || range.font.color === '#89d185')) {
-            range.font.highlightColor = null;
+          // Check if this is our highlighted inserted text (green)
+          if (range.text.trim() === change.newText.trim() && range.font.color === '#89d185') {
+            // Remove green color, keep text with default color
             range.font.color = null;
-            range.font.bold = false;
             await context.sync();
             break;
           }
@@ -231,8 +221,9 @@ export async function acceptInlineChange(change: DocumentChange): Promise<void> 
           context.load(range, ['text', 'font']);
           await context.sync();
           
-          // Check if this is our strikethrough deleted text
-          if (range.text.trim() === change.oldText.trim() && range.font.strikeThrough) {
+          // Check if this is our strikethrough deleted text (red)
+          if (range.text.trim() === change.oldText.trim() && range.font.strikeThrough && range.font.color === '#f48771') {
+            // Delete the text (removes red strikethrough)
             range.delete();
             await context.sync();
             break;
@@ -266,9 +257,9 @@ export async function rejectInlineChange(change: DocumentChange): Promise<void> 
           context.load(range, ['text', 'font']);
           await context.sync();
           
-          // Check if this is our highlighted new text
-          if (range.text.trim() === change.newText.trim() && 
-              (range.font.highlightColor === '#1e4620' || range.font.color === '#89d185')) {
+          // Check if this is our highlighted new text (green)
+          if (range.text.trim() === change.newText.trim() && range.font.color === '#89d185') {
+            // Remove green text
             range.delete();
             await context.sync();
             break;
@@ -287,11 +278,11 @@ export async function rejectInlineChange(change: DocumentChange): Promise<void> 
           context.load(range, ['text', 'font']);
           await context.sync();
           
-          // Check if this is our strikethrough old text
-          if (range.text.trim() === change.oldText.trim() && range.font.strikeThrough) {
+          // Check if this is our strikethrough old text (red)
+          if (range.text.trim() === change.oldText.trim() && range.font.strikeThrough && range.font.color === '#f48771') {
+            // Remove strikethrough and red color, revert to default text color
             range.font.strikeThrough = false;
             range.font.color = null;
-            range.font.highlightColor = null;
             await context.sync();
             break;
           }
@@ -310,9 +301,9 @@ export async function rejectInlineChange(change: DocumentChange): Promise<void> 
           context.load(range, ['text', 'font']);
           await context.sync();
           
-          // Check if this is our highlighted inserted text
-          if (range.text.trim() === change.newText.trim() && 
-              (range.font.highlightColor === '#1e4620' || range.font.color === '#89d185')) {
+          // Check if this is our highlighted inserted text (green)
+          if (range.text.trim() === change.newText.trim() && range.font.color === '#89d185') {
+            // Remove green text
             range.delete();
             await context.sync();
             break;
@@ -332,11 +323,11 @@ export async function rejectInlineChange(change: DocumentChange): Promise<void> 
           context.load(range, ['text', 'font']);
           await context.sync();
           
-          // Check if this is our strikethrough deleted text
-          if (range.text.trim() === change.oldText.trim() && range.font.strikeThrough) {
+          // Check if this is our strikethrough deleted text (red)
+          if (range.text.trim() === change.oldText.trim() && range.font.strikeThrough && range.font.color === '#f48771') {
+            // Remove strikethrough and red color, revert to default text color
             range.font.strikeThrough = false;
             range.font.color = null;
-            range.font.highlightColor = null;
             await context.sync();
             break;
           }
