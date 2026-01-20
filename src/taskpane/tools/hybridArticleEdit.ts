@@ -339,27 +339,34 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
               const textBeforeMatch = paragraphText.substring(0, foundTextStart).trim();
               
               if (location === 'inline') {
-                // Inline: insert right after the found text
+                // Inline: insert right after the found text (within the sentence)
                 range = foundRange;
                 insertLocation = Word.InsertLocation.after;
               } else if (location === 'before') {
-                // "Before" means: insert a new paragraph before the paragraph containing the text
-                // UNLESS the text is in the middle of a sentence, then insert before the text
-                if (textBeforeMatch.length === 0 || textBeforeMatch.length < 5) {
-                  // Text is at or near the start of paragraph - insert new paragraph before this paragraph
+                // "Before" means: insert right before the found text
+                // Check if the text is at the very start of the paragraph
+                if (textBeforeMatch.length === 0) {
+                  // Text is at paragraph start - insert as new paragraph before this paragraph
                   range = targetParagraph.getRange('Start');
                   insertLocation = Word.InsertLocation.before;
                 } else {
-                  // Text is in the middle - this is unusual for "before", but insert before the text
-                  // Actually, for "before" we should still insert a new paragraph before the paragraph
-                  // Let's insert at paragraph start to create a new paragraph
-                  range = targetParagraph.getRange('Start');
+                  // Text is in the middle or end of paragraph - insert right before the found text
+                  range = foundRange;
                   insertLocation = Word.InsertLocation.before;
                 }
               } else {
-                // For "after", insert after the paragraph end
-                range = targetParagraph.getRange('End');
-                insertLocation = Word.InsertLocation.after;
+                // For "after", check if we should insert after paragraph or after text
+                // If text is at end of paragraph, insert after paragraph; otherwise after text
+                const textAfterMatch = paragraphText.substring(foundTextStart + foundRange.text.length).trim();
+                if (textAfterMatch.length === 0 || textAfterMatch.length < 5) {
+                  // Text is at or near end of paragraph - insert after paragraph
+                  range = targetParagraph.getRange('End');
+                  insertLocation = Word.InsertLocation.after;
+                } else {
+                  // Text is in middle - insert right after the found text
+                  range = foundRange;
+                  insertLocation = Word.InsertLocation.after;
+                }
               }
             } else {
               throw new Error(`Invalid location: ${location}`);
@@ -367,26 +374,67 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
             
             await context.sync();
             
-            // Insert the text
+            // Insert the text intelligently based on location and context
             let insertedRange: Word.Range;
             
-            // For "before" at paragraph start, insert as a new paragraph
-            if (location === 'before' && targetParagraph) {
-              // Always insert as a new paragraph before the paragraph containing the found text
-              // This ensures "before 'The Construction Manager shall'" creates a new paragraph before that paragraph
-              const newParagraph = targetParagraph.insertParagraph(text, Word.InsertLocation.before);
-              context.load(newParagraph, ['style']);
+            // Check if we're inserting at paragraph boundaries
+            const paragraphStart = targetParagraph ? targetParagraph.getRange('Start') : null;
+            const paragraphEnd = targetParagraph ? targetParagraph.getRange('End') : null;
+            
+            if (location === 'before' && targetParagraph && paragraphStart) {
+              // Check if range is at paragraph start by comparing positions
+              context.load(range, 'start');
+              context.load(paragraphStart, 'start');
               await context.sync();
               
-              // Preserve paragraph style if it exists
-              if (targetParagraph.style && targetParagraph.style !== 'Normal') {
-                newParagraph.style = targetParagraph.style;
+              if (range.start === paragraphStart.start) {
+                // Inserting before paragraph start - create new paragraph
+                const newParagraph = targetParagraph.insertParagraph(text, Word.InsertLocation.before);
+                context.load(newParagraph, ['style']);
                 await context.sync();
+                
+                // Preserve paragraph style if it exists
+                if (targetParagraph.style && targetParagraph.style !== 'Normal') {
+                  newParagraph.style = targetParagraph.style;
+                  await context.sync();
+                }
+                
+                insertedRange = newParagraph.getRange();
+              } else {
+                // Inserting right before found text - add space if needed
+                const textToInsert = text.endsWith(' ') || text.endsWith('\n') ? text : text + ' ';
+                insertedRange = range.insertText(textToInsert, Word.InsertLocation.before);
               }
+            } else if (location === 'after' && targetParagraph && paragraphEnd) {
+              // Check if range is at paragraph end
+              context.load(range, 'start');
+              context.load(paragraphEnd, 'start');
+              await context.sync();
               
-              insertedRange = newParagraph.getRange();
+              if (range.start === paragraphEnd.start) {
+                // Inserting after paragraph end - create new paragraph
+                const newParagraph = targetParagraph.insertParagraph(text, Word.InsertLocation.after);
+                context.load(newParagraph, ['style']);
+                await context.sync();
+                
+                // Preserve paragraph style if it exists
+                if (targetParagraph.style && targetParagraph.style !== 'Normal') {
+                  newParagraph.style = targetParagraph.style;
+                  await context.sync();
+                }
+                
+                insertedRange = newParagraph.getRange();
+              } else {
+                // Inserting right after found text - add space if needed
+                const textToInsert = text.startsWith(' ') || text.startsWith('\n') ? text : ' ' + text;
+                insertedRange = range.insertText(textToInsert, Word.InsertLocation.after);
+              }
+            } else if (location === 'after' || location === 'inline') {
+              // Inserting after found text - add space if needed
+              const textToInsert = text.startsWith(' ') || text.startsWith('\n') ? text : ' ' + text;
+              insertedRange = range.insertText(textToInsert, Word.InsertLocation.after);
             } else {
-              // Regular text insertion for other cases
+              // Regular text insertion
               insertedRange = range.insertText(text, insertLocation);
             }
             
