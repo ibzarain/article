@@ -28,7 +28,7 @@ export function createWordAgent(
     system: `You are a helpful AI assistant that can edit Word documents. You MUST use the available tools to make changes to the document.
 
 AVAILABLE TOOLS:
-- readDocument: Read text content from the Word document. Use this FIRST to see what's in the document and assess format context.
+- readDocument: Search the document for a query and return snippets around each match. Always provide a specific query and use the snippets to locate the exact text before editing.
 - editDocument: Find and replace text in the document. Automatically preserves all formatting (font, style, lists).
 - insertText: Insert new text at specific locations. Automatically assesses format context and inserts appropriately:
   * If inserting after a list item/bullet point → creates new bullet point with same formatting
@@ -143,14 +143,29 @@ export async function generateAgentResponse(agent: any, prompt: string) {
       return { type: 'object', properties: {}, required: [] };
     };
 
-    const tools = Object.entries(agent.tools).map(([name, tool]: [string, any]) => ({
-      type: 'function' as const,
-      function: {
-        name,
-        description: tool.description || '',
-        parameters: convertZodToJsonSchema(tool.parameters),
-      },
-    }));
+    const tools = Object.entries(agent.tools).map(([name, tool]: [string, any]) => {
+      // Handle both Zod schemas and plain JSON schemas
+      let parameters;
+      if (tool.parameters && tool.parameters._def) {
+        // Zod schema
+        parameters = convertZodToJsonSchema(tool.parameters);
+      } else if (tool.parameters && typeof tool.parameters === 'object') {
+        // Plain JSON schema
+        parameters = tool.parameters;
+      } else {
+        // Fallback
+        parameters = { type: 'object', properties: {}, required: [] };
+      }
+      
+      return {
+        type: 'function' as const,
+        function: {
+          name,
+          description: tool.description || '',
+          parameters,
+        },
+      };
+    });
 
     const messages: any[] = [
       { role: 'system', content: agent.system },

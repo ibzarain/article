@@ -10,6 +10,9 @@ import { generateAgentResponse } from "../agent/wordAgent";
 import { createChangeTracker } from "../utils/changeTracker";
 import { DocumentChange, ChangeTracking } from "../types/changes";
 import { setChangeTracker } from "../tools/wordEditWithTracking";
+import { setArticleChangeTracker } from "../tools/articleEditTools";
+import { setFastArticleChangeTracker } from "../tools/fastArticleEdit";
+import { setHybridArticleChangeTracker, executeArticleInstructionsHybrid } from "../tools/hybridArticleEdit";
 import PendingChanges from "./PendingChanges";
 
 interface AgentChatProps {
@@ -197,11 +200,16 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
 
   // Set up change tracking callback for the tools
   useEffect(() => {
-    setChangeTracker(async (change: DocumentChange) => {
+    const trackChange = async (change: DocumentChange) => {
       await changeTracker.addChange(change);
       // Add to current message's changes
       currentMessageChangesRef.current.push(change);
-    });
+    };
+
+    setChangeTracker(trackChange);
+    setArticleChangeTracker(trackChange);
+    setFastArticleChangeTracker(trackChange);
+    setHybridArticleChangeTracker(trackChange);
   }, [changeTracker]);
 
   const scrollToBottom = () => {
@@ -226,11 +234,12 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
       return;
     }
 
-    const userMessage = input.trim();
+    // Preserve exact formatting - don't trim, keep as-is
+    const userMessage = input;
     setInput("");
     setError(null);
     setIsLoading(true);
-    
+
     // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
@@ -244,14 +253,28 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
     setMessages(newMessages);
 
     try {
-      // Get response from agent (changes will be tracked automatically via the agent's onChange callback)
-      const response = await generateAgentResponse(agent, userMessage);
+      // HYBRID PATH: Algorithm for parsing/finding, minimal AI for insertion
+      // Match ARTICLE X-Y where X is any letter and Y is any number (e.g., A-1, X-67)
+      // Also match instructions that start with article name followed by edits
+      const hasArticleInstructions = /ARTICLE\s+[A-Z]-\d+/i.test(userMessage) && (/\.\d+\s+(Add|Delete|Substitute|Replace)/i.test(userMessage) || /\.\d+\s+[A-Z]/i.test(userMessage));
+
+      let response: string;
+      if (hasArticleInstructions) {
+        // Hybrid execution: Algorithm parses/finds, AI only for final insertion (fast like Cursor)
+        const result = await executeArticleInstructionsHybrid(userMessage, agent.apiKey, agent.model);
+        response = result.success
+          ? `Applied ${result.results?.length || 0} article operation(s) successfully. ${result.results?.join('; ') || ''}`
+          : `Error: ${result.error || 'Unknown error'}`;
+      } else {
+        // Get response from agent (changes will be tracked automatically via the agent's onChange callback)
+        response = await generateAgentResponse(agent, userMessage);
+      }
 
       // Add assistant response (changes are now shown inline in document)
       setMessages([
         ...newMessages,
-        { 
-          role: "assistant", 
+        {
+          role: "assistant",
           content: response,
         },
       ]);
@@ -305,14 +328,12 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
             messages.map((message, index) => (
               <div
                 key={index}
-                className={`${styles.message} ${
-                  message.role === "user" ? styles.userMessage : styles.assistantMessage
-                }`}
+                className={`${styles.message} ${message.role === "user" ? styles.userMessage : styles.assistantMessage
+                  }`}
               >
                 <div
-                  className={`${styles.messageBubble} ${
-                    message.role === "user" ? styles.userBubble : styles.assistantBubble
-                  }`}
+                  className={`${styles.messageBubble} ${message.role === "user" ? styles.userBubble : styles.assistantBubble
+                    }`}
                 >
                   {message.content}
                 </div>
@@ -329,10 +350,10 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
         </div>
 
         {error && (
-          <div style={{ 
-            padding: "12px 24px", 
-            backgroundColor: "#3a1f1f", 
-            color: "#f48771", 
+          <div style={{
+            padding: "12px 24px",
+            backgroundColor: "#3a1f1f",
+            color: "#f48771",
             borderTop: "1px solid #5a2f2f",
             fontSize: "13px"
           }}>
@@ -354,6 +375,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                 }
               }}
               placeholder="Ask me to edit your document..."
+              style={{ whiteSpace: 'pre-wrap' }}
               disabled={isLoading}
               rows={1}
             />
@@ -372,7 +394,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
           </div>
         </div>
       </div>
-      
+
       {/* Pending Changes Panel */}
       <PendingChanges changeTracker={changeTracker} />
     </div>

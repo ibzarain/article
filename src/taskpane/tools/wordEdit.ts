@@ -6,55 +6,76 @@ import { z } from 'zod';
  * Tool to read text from the Word document
  */
 export const readDocumentTool = tool({
-  description: 'Read text content from the Word document. Use this to see what is currently in the document before making edits.',
+  description: 'Search the Word document for a query and return contextual snippets around each match.',
   parameters: z.object({
-    startLocation: z.string().optional().describe('Optional: Start location to read from (e.g., "beginning", "end", or search text)'),
-    length: z.number().optional().describe('Optional: Number of characters to read. If not specified, reads the entire document.'),
+    query: z.string().min(1).describe('Text to search for in the document.'),
+    contextChars: z.number().optional().default(800).describe('Number of characters of context to include before and after each match.'),
+    maxMatches: z.number().optional().describe('Optional cap on number of snippets returned (does not change totalFound).'),
+    matchCase: z.boolean().optional().default(false).describe('Whether the search should be case-sensitive.'),
+    matchWholeWord: z.boolean().optional().default(false).describe('Whether to match whole words only.'),
   }),
-  execute: async ({ startLocation, length }) => {
+  execute: async ({ query, contextChars = 800, maxMatches, matchCase, matchWholeWord }) => {
     try {
       const result = await Word.run(async (context) => {
-        let range: Word.Range;
-        
-        if (startLocation === 'beginning') {
-          range = context.document.body.getRange('Start');
-        } else if (startLocation === 'end') {
-          range = context.document.body.getRange('End');
-        } else if (startLocation) {
-          // Search for the location text
-          const searchResults = context.document.body.search(startLocation, {
-            matchCase: false,
-            matchWholeWord: false,
-          });
-          context.load(searchResults, 'items');
-          await context.sync();
-          
-          if (searchResults.items.length === 0) {
-            throw new Error(`Location "${startLocation}" not found in document`);
-          }
-          range = searchResults.items[0].getRange('Start');
-        } else {
-          range = context.document.body.getRange('Whole');
-        }
-        
+        const range = context.document.body.getRange('Whole');
         context.load(range, 'text');
         await context.sync();
-        
-        let text = range.text;
-        if (length && length > 0) {
-          text = text.substring(0, length);
+
+        const text = range.text || '';
+        const safeContextChars = Math.max(0, Math.floor(contextChars || 0));
+        const safeMaxMatches = typeof maxMatches === 'number' && maxMatches > 0 ? Math.floor(maxMatches) : undefined;
+
+        const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const escapedQuery = escapeRegExp(query);
+        const pattern = matchWholeWord ? `\\b${escapedQuery}\\b` : escapedQuery;
+        const flags = matchCase ? 'g' : 'gi';
+        const regex = new RegExp(pattern, flags);
+
+        const matches: Array<{
+          matchText: string;
+          snippet: string;
+          matchStart: number;
+          matchEnd: number;
+          snippetStart: number;
+          snippetEnd: number;
+        }> = [];
+
+        let totalFound = 0;
+        let match: RegExpExecArray | null;
+
+        while ((match = regex.exec(text)) !== null) {
+          totalFound++;
+
+          const matchStart = match.index;
+          const matchEnd = matchStart + match[0].length;
+          const snippetStart = Math.max(0, matchStart - safeContextChars);
+          const snippetEnd = Math.min(text.length, matchEnd + safeContextChars);
+
+          if (!safeMaxMatches || matches.length < safeMaxMatches) {
+            matches.push({
+              matchText: match[0],
+              snippet: text.slice(snippetStart, snippetEnd),
+              matchStart,
+              matchEnd,
+              snippetStart,
+              snippetEnd,
+            });
+          }
         }
-        
+
         return {
-          text,
-          length: text.length,
+          matches,
+          totalFound,
+          documentLength: text.length,
         };
       });
       
       return {
         success: true,
-        content: result.text,
-        length: result.length,
+        query,
+        content: result.matches,
+        totalFound: result.totalFound,
+        documentLength: result.documentLength,
       };
     } catch (error) {
       return {
