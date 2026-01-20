@@ -87,6 +87,23 @@ const useStyles = makeStyles({
     marginBottom: "8px",
     lineHeight: "1.5",
   },
+  insertedText: {
+    color: "#89d185",
+    fontWeight: "500",
+  },
+  deletedText: {
+    color: "#f48771",
+    textDecoration: "line-through",
+  },
+  oldText: {
+    color: "#f48771",
+    textDecoration: "line-through",
+    marginRight: "8px",
+  },
+  newText: {
+    color: "#89d185",
+    fontWeight: "500",
+  },
   changeActions: {
     display: "flex",
     gap: "8px",
@@ -226,7 +243,29 @@ const PendingChanges: React.FC<PendingChangesProps> = ({ changeTracker }) => {
         {changes.map((change) => (
           <div key={change.id} className={styles.changeCard}>
             <div className={styles.changeDescription}>
-              {change.description}
+              {change.type === 'insert' && change.newText && (
+                <>
+                  <span style={{ color: "#858585" }}>Inserted: </span>
+                  <span className={styles.insertedText}>"{change.newText}"</span>
+                </>
+              )}
+              {change.type === 'delete' && change.oldText && (
+                <>
+                  <span style={{ color: "#858585" }}>Deleted: </span>
+                  <span className={styles.deletedText}>"{change.oldText}"</span>
+                </>
+              )}
+              {change.type === 'edit' && change.oldText && change.newText && (
+                <>
+                  <span style={{ color: "#858585" }}>Changed: </span>
+                  <span className={styles.oldText}>"{change.oldText}"</span>
+                  <span style={{ color: "#858585" }}>→</span>
+                  <span className={styles.newText}> "{change.newText}"</span>
+                </>
+              )}
+              {change.type !== 'insert' && change.type !== 'delete' && change.type !== 'edit' && (
+                change.description
+              )}
             </div>
             <div className={styles.changeActions}>
               <button

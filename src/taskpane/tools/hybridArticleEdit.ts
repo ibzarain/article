@@ -3,6 +3,7 @@ import { extractArticle, parseArticleName, ArticleBoundaries } from '../utils/ar
 import { DocumentChange } from '../types/changes';
 import { generateAgentResponse } from '../agent/wordAgent';
 import { createWordAgent } from '../agent/wordAgent';
+import { renderInlineDiff } from '../utils/inlineDiffRenderer';
 
 // Global change tracker - will be set by the agent wrapper
 let changeTracker: ((change: DocumentChange) => Promise<void>) | null = null;
@@ -100,7 +101,7 @@ function createScopedReadDocumentTool(articleBoundaries: ArticleBoundaries) {
 /**
  * Creates scoped editing tools that only work within article boundaries
  */
-function createScopedEditTools(articleBoundaries: ArticleBoundaries) {
+function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName: string) {
   return {
     editDocument: {
       description: 'Edit or replace text in the article. Automatically preserves all formatting. Only edits within the current article section.',
@@ -151,9 +152,9 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries) {
               
               replacementCount++;
               
-              // Track the change
+              // Track the change (renderInlineDiff will handle the visual diff)
               if (changeTracker) {
-                await changeTracker({
+                const changeObj: DocumentChange = {
                   type: 'edit',
                   description: `Replaced "${actualOldText}" with "${newText}"`,
                   oldText: actualOldText,
@@ -163,7 +164,13 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries) {
                   timestamp: new Date(),
                   applied: false,
                   canUndo: true,
-                });
+                };
+                
+                // Render inline diff (this will show old text with strikethrough/red and new text in green)
+                await renderInlineDiff(changeObj);
+                
+                // Track the change
+                await changeTracker(changeObj);
               }
             }
             
@@ -190,7 +197,7 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries) {
       },
     },
     insertText: {
-      description: 'Insert text into the article at a specific location. Only works within the current article section.',
+      description: 'Insert text into the article at a specific location. Only works within the current article section. CRITICAL: The searchText MUST be the EXACT text the user specified, found via readDocument. Do NOT use a different search text.',
       parameters: {
         type: 'object',
         properties: {
@@ -200,7 +207,7 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries) {
             enum: ['before', 'after', 'beginning', 'end', 'inline'],
             description: 'Where to insert: "before" or "after" a search text, "beginning" or "end" of article, or "inline" to insert within the found text',
           },
-          searchText: { type: 'string', description: 'Required if location is "before", "after", or "inline". The text to search for to determine insertion point.' },
+          searchText: { type: 'string', description: 'Required if location is "before", "after", or "inline". MUST be the EXACT text the user specified (found via readDocument). Use the exact matchText from readDocument results, including all punctuation and capitalization.' },
         },
         required: ['text', 'location'],
       },
@@ -241,8 +248,11 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries) {
               await context.sync();
               
               if (searchResults.items.length === 0) {
-                throw new Error(`Search text "${searchText}" not found in article`);
+                throw new Error(`Search text "${searchText}" not found in article. Please verify the exact text exists in ARTICLE ${articleName} using readDocument first.`);
               }
+              
+              // Log the search for debugging
+              console.log(`[insertText] Searching for: "${searchText}", found ${searchResults.items.length} match(es)`);
               
               const foundRange = searchResults.items[0];
               const targetParagraph = foundRange.paragraphs.getFirst();
@@ -268,9 +278,13 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries) {
             const insertedRange = range.insertText(text, insertLocation);
             await context.sync();
             
-            // Track the change
+            // Apply green color to inserted text immediately
+            insertedRange.font.color = '#89d185';
+            await context.sync();
+            
+            // Track the change (text is already green from above)
             if (changeTracker) {
-              await changeTracker({
+              const changeObj: DocumentChange = {
                 type: 'insert',
                 description: `Inserted "${text}" ${location}${searchText ? ` "${searchText}"` : ''}`,
                 newText: text,
@@ -280,7 +294,13 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries) {
                 timestamp: new Date(),
                 applied: false,
                 canUndo: true,
-              });
+              };
+              
+              // Render inline diff (will ensure text is green if not already)
+              await renderInlineDiff(changeObj);
+              
+              // Track the change
+              await changeTracker(changeObj);
             }
             
             return {
@@ -348,9 +368,9 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries) {
               
               deletionCount++;
               
-              // Track the change
+              // Track the change (renderInlineDiff will handle the visual diff)
               if (changeTracker) {
-                await changeTracker({
+                const changeObj: DocumentChange = {
                   type: 'delete',
                   description: `Deleted "${deletedText}"`,
                   oldText: deletedText,
@@ -359,7 +379,13 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries) {
                   timestamp: new Date(),
                   applied: false,
                   canUndo: true,
-                });
+                };
+                
+                // Render inline diff (this will show deleted text with strikethrough/red)
+                await renderInlineDiff(changeObj);
+                
+                // Track the change
+                await changeTracker(changeObj);
               }
             }
             
@@ -420,7 +446,7 @@ export async function executeArticleInstructionsHybrid(
     
     // Create scoped tools that only work within the article
     const scopedReadDocument = createScopedReadDocumentTool(articleBoundaries);
-    const scopedEditTools = createScopedEditTools(articleBoundaries);
+    const scopedEditTools = createScopedEditTools(articleBoundaries, articleName);
     
     // Create a scoped agent with only article content
     // Include the article content directly in the prompt so AI knows what it's working with
@@ -451,12 +477,12 @@ AVAILABLE TOOLS:
 CRITICAL RULES:
 1. You MUST only work within ARTICLE ${articleName} - do not attempt to edit content outside this article.
 2. ALWAYS use the tools to make changes - don't just describe what you would do.
-3. Tool order matters: if the exact text or location is uncertain, call readDocument first and use the returned snippet verbatim as searchText for edits.
+3. MANDATORY: ALWAYS call readDocument FIRST with the EXACT search text the user specified. Then use the EXACT matchText from the readDocument result as searchText for insertText/editDocument/deleteText. NEVER use a different search text than what the user requested.
 4. Use ONE tool call at a time. Wait for the tool result before deciding the next action.
-5. Be PRECISE with searchText: use unique, specific text from the article. Avoid generic headings like "ARTICLE A-3" unless the user explicitly targets them.
+5. Be PRECISE with searchText: use the EXACT text from readDocument results. If the user says "before 'The Construction Manager shall:'", you MUST search for "The Construction Manager shall:" and use that EXACT text (including punctuation) as searchText.
 6. Use replaceAll/deleteAll only when the user requests it or multiple occurrences must be changed. Otherwise modify only the first match.
-7. For insertText: location "before"/"after"/"inline" requires searchText. Use "inline" only for inserting within a sentence.
-8. If a tool reports "not found" or errors, call readDocument to get more context and retry with a refined searchText.
+7. For insertText: location "before"/"after"/"inline" requires searchText. Use "inline" only for inserting within a sentence. The searchText MUST be the exact text the user specified, found via readDocument.
+8. If readDocument doesn't find the exact text the user specified, report an error - DO NOT substitute with a different search text. The user's instruction is explicit and must be followed exactly.
 
 The user has provided the following instructions for ARTICLE ${articleName}:
 ${instruction}

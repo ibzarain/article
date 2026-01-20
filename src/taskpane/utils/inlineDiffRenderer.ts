@@ -99,9 +99,13 @@ export async function renderInlineDiff(change: DocumentChange): Promise<void> {
         }
         
         if (insertRange) {
-          // Apply green color
-          insertRange.font.color = '#89d185';
+          // Check if already green, if not apply green color
+          context.load(insertRange.font, 'color');
           await context.sync();
+          if (insertRange.font.color !== '#89d185') {
+            insertRange.font.color = '#89d185';
+            await context.sync();
+          }
         }
         
       } else if (change.type === 'delete' && change.oldText) {

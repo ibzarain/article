@@ -217,6 +217,8 @@ export const insertTextTool = tool({
           await context.sync();
         }
         
+        // Apply green color to inserted text immediately
+        insertedRange.font.color = '#89d185';
         await context.sync();
         
         // Track the change (will render inline diff)
