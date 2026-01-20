@@ -631,38 +631,35 @@ CURRENT ARTICLE CONTENT (for reference):
 ${articleContentPreview}
 
 AVAILABLE TOOLS:
-- readDocument: SEARCH tool - Search ARTICLE ${articleName} for a query and return contextual snippets around each match. Use your intelligence to find the right location - you can search for variations, related phrases, or context. Returns matches with snippets showing context.
-- editDocument: Find and replace text within ARTICLE ${articleName} only. Use searchText from readDocument results.
-- insertText: Insert new text within ARTICLE ${articleName} only. Use searchText from readDocument results to find the insertion point.
-- deleteText: Delete text from ARTICLE ${articleName} only. Use searchText from readDocument results.
+- readDocument: SEARCH tool - Search ARTICLE ${articleName} for a query and return contextual snippets around each match. MANDATORY: Call this FIRST before any insert/edit/delete. Returns matches with snippets showing context. Use the matchText from results as searchText.
+- editDocument: Find and replace text within ARTICLE ${articleName} only. Requires searchText from readDocument results.
+- insertText: Insert new text within ARTICLE ${articleName} only. MANDATORY: Requires searchText from readDocument results. If user says "before X", you MUST find X via readDocument first, then use that matchText as searchText with location: "before".
+- deleteText: Delete text from ARTICLE ${articleName} only. Requires searchText from readDocument results.
 
-WORKFLOW - USE YOUR AI INTELLIGENCE:
-1. UNDERSTAND the user's instruction semantically. If they say "before 'The Construction Manager shall:'", understand what they mean and where that should be.
+MANDATORY WORKFLOW - FOLLOW THIS EXACTLY:
+1. UNDERSTAND the user's instruction. If they say "before 'The Construction Manager shall:'", you MUST find that exact text or a close variation.
 
-2. USE readDocument to FIND the location intelligently:
-   - Search for the text the user mentioned, or variations of it
-   - Look for context clues, related phrases, or semantic matches
-   - Review the snippets to understand the document structure
-   - If the exact text isn't found, try related searches (e.g., "Construction Manager", "shall perform", etc.)
-   - Use your understanding of the document to find the right location
+2. ALWAYS call readDocument FIRST with the text the user specified:
+   - If user says "before 'The Construction Manager shall:'", search for "The Construction Manager shall" (with or without colon)
+   - Review the readDocument results - you MUST see matches before proceeding
+   - If no matches found, try variations: "Construction Manager shall", "The Construction Manager", etc.
+   - DO NOT proceed to insert/edit until you've found the location via readDocument
 
-3. Once you've found the right location using readDocument:
-   - Use the matchText or a nearby unique text from the snippets as searchText
-   - Call the appropriate tool (insertText/editDocument/deleteText) with the correct location
+3. Once readDocument returns matches:
+   - Use the EXACT matchText from the results as searchText for insertText
+   - If multiple matches, use the first one (or the one that makes sense in context)
+   - Call insertText with location: "before" and the matchText as searchText
 
-4. BE SMART about finding locations:
-   - If user says "before X", search for X and use the match as your insertion point
-   - If exact text isn't found, search for variations or context
-   - Use the snippets to understand where things are in the document
-   - Make intelligent decisions about where to insert/edit based on context
+4. CRITICAL: If readDocument doesn't find the text after multiple searches:
+   - Report what you searched for and that it wasn't found
+   - DO NOT default to "beginning" or "end" - that's wrong!
+   - Ask the user for clarification or an alternative search term
 
-5. ALWAYS use the tools to make changes - don't just describe what you would do.
+5. NEVER insert at "beginning" or "end" unless the user explicitly asks for that. If user says "before X", you MUST find X first.
 
 6. Use ONE tool call at a time. Wait for the tool result before deciding the next action.
 
-7. For insertText: location "before"/"after"/"inline" requires searchText. Use text from readDocument results that uniquely identifies the insertion point.
-
-8. If you cannot find any relevant location after multiple intelligent searches, report what you tried and ask for clarification.
+7. For insertText: location "before"/"after"/"inline" requires searchText from readDocument results.
 
 The user has provided the following instructions for ARTICLE ${articleName}:
 ${instruction}
