@@ -30,15 +30,15 @@ const useStyles = makeStyles({
     flexDirection: "column",
     width: "100%",
     height: "100%",
-    backgroundColor: "#1e1e1e",
-    color: "#cccccc",
+    backgroundColor: "#0d1117",
+    color: "#c9d1d9",
     overflow: "hidden",
   },
   chatPanel: {
     flex: 1,
     display: "flex",
     flexDirection: "column",
-    backgroundColor: "#1e1e1e",
+    backgroundColor: "#0d1117",
     height: "100%",
     overflow: "hidden",
   },
@@ -46,30 +46,30 @@ const useStyles = makeStyles({
     flex: 1,
     display: "flex",
     flexDirection: "column",
-    gap: "16px",
+    gap: "20px",
     overflowY: "auto",
     overflowX: "hidden",
-    padding: "24px",
+    padding: "20px 24px",
     scrollbarWidth: "thin",
-    scrollbarColor: "#424242 #1e1e1e",
+    scrollbarColor: "#30363d #0d1117",
     "&::-webkit-scrollbar": {
-      width: "8px",
+      width: "10px",
     },
     "&::-webkit-scrollbar-track": {
-      background: "#1e1e1e",
+      background: "#0d1117",
     },
     "&::-webkit-scrollbar-thumb": {
-      background: "#424242",
-      borderRadius: "4px",
+      background: "#30363d",
+      borderRadius: "5px",
       "&:hover": {
-        background: "#4e4e4e",
+        background: "#484f58",
       },
     },
   },
   message: {
     display: "flex",
     flexDirection: "column",
-    gap: "8px",
+    gap: "6px",
     maxWidth: "85%",
   },
   userMessage: {
@@ -79,110 +79,121 @@ const useStyles = makeStyles({
     alignSelf: "flex-start",
   },
   messageBubble: {
-    padding: "12px 16px",
-    borderRadius: "8px",
+    padding: "14px 18px",
+    borderRadius: "12px",
     fontSize: "14px",
-    lineHeight: "1.5",
+    lineHeight: "1.6",
     wordWrap: "break-word",
+    boxShadow: "0 1px 2px rgba(0, 0, 0, 0.1)",
   },
   userBubble: {
-    backgroundColor: "#007acc",
+    backgroundColor: "#0969da",
     color: "#ffffff",
     borderBottomRightRadius: "4px",
   },
   assistantBubble: {
-    backgroundColor: "#252526",
-    color: "#cccccc",
-    border: "1px solid #3e3e42",
+    backgroundColor: "#161b22",
+    color: "#c9d1d9",
+    border: "1px solid #30363d",
     borderBottomLeftRadius: "4px",
   },
   inputContainer: {
-    padding: "16px 24px",
-    borderTop: "1px solid #3e3e42",
-    backgroundColor: "#252526",
+    padding: "16px 20px",
+    borderTop: "1px solid #21262d",
+    backgroundColor: "#0d1117",
     flexShrink: 0,
   },
   inputRow: {
+    position: "relative",
     display: "flex",
-    gap: "12px",
-    alignItems: "flex-end",
+    alignItems: "center",
   },
   textarea: {
     flex: 1,
     minHeight: "44px",
     maxHeight: "200px",
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
     fontSize: "14px",
-    backgroundColor: "#1e1e1e",
-    color: "#cccccc",
-    border: "1px solid #3e3e42",
-    borderRadius: "22px",
-    padding: "10px 20px",
+    backgroundColor: "#0d1117",
+    color: "#c9d1d9",
+    border: "1px solid #30363d",
+    borderRadius: "12px",
+    padding: "10px 50px 10px 16px",
     resize: "none",
     lineHeight: "1.5",
+    whiteSpace: "pre-wrap",
+    wordWrap: "break-word",
+    overflowWrap: "break-word",
+    textDecoration: "none",
+    textDecorationLine: "none",
     "&:focus": {
       outline: "none",
-      borderColor: "#007acc",
-      boxShadow: "0 0 0 1px #007acc",
+      borderColor: "#1f6feb",
+      boxShadow: "0 0 0 3px rgba(31, 111, 235, 0.1)",
     } as any,
     "&::placeholder": {
-      color: "#6a6a6a",
+      color: "#6e7681",
     },
   },
   sendButton: {
-    width: "44px",
-    height: "44px",
-    minWidth: "44px",
-    backgroundColor: "#007acc",
+    position: "absolute",
+    right: "8px",
+    bottom: "8px",
+    width: "28px",
+    height: "28px",
+    minWidth: "28px",
+    backgroundColor: "#1f6feb",
     color: "#ffffff",
     border: "none",
-    borderRadius: "50%",
+    borderRadius: "6px",
     fontSize: "14px",
     fontWeight: "500",
     cursor: "pointer",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    transition: "all 0.2s ease",
+    transition: "all 0.15s ease",
     "&:hover:not(:disabled)": {
-      backgroundColor: "#005a9e",
+      backgroundColor: "#0969da",
       transform: "scale(1.05)",
     },
     "&:active:not(:disabled)": {
       transform: "scale(0.95)",
+      backgroundColor: "#0860ca",
     },
     "&:disabled": {
-      opacity: 0.5,
+      opacity: 0.4,
       cursor: "not-allowed",
+      backgroundColor: "#30363d",
     },
   },
   thinking: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
-    color: "#858585",
+    gap: "10px",
+    color: "#8b949e",
     fontSize: "13px",
-    fontStyle: "italic",
-    padding: "8px 16px",
+    fontStyle: "normal",
+    padding: "10px 18px",
   },
   emptyState: {
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    gap: "16px",
+    gap: "20px",
     padding: "60px 40px",
-    color: "#858585",
+    color: "#8b949e",
     textAlign: "center",
   },
   emptyStateIcon: {
     fontSize: "48px",
-    color: "#007acc",
-    opacity: 0.7,
+    color: "#1f6feb",
+    opacity: 0.8,
   },
   emptyStateText: {
     fontSize: "14px",
-    lineHeight: "1.6",
+    lineHeight: "1.7",
     maxWidth: "400px",
   },
 });
@@ -228,6 +239,30 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
       textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
     }
   }, [input]);
+
+  // Handle paste events to preserve formatting
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    e.preventDefault();
+    const pastedText = e.clipboardData.getData('text/plain');
+    
+    // Insert the pasted text at the cursor position, preserving formatting
+    const textarea = e.currentTarget;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const currentValue = input;
+    
+    const newValue = currentValue.substring(0, start) + pastedText + currentValue.substring(end);
+    setInput(newValue);
+    
+    // Set cursor position after the pasted text using requestAnimationFrame for better timing
+    requestAnimationFrame(() => {
+      const newCursorPos = start + pastedText.length;
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+      // Trigger resize after paste
+      textarea.style.height = "auto";
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+    });
+  };
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) {
@@ -313,13 +348,13 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
             <div className={styles.emptyState}>
               <SparkleFilled className={styles.emptyStateIcon} />
               <div className={styles.emptyStateText}>
-                <strong style={{ color: "#ffffff", fontSize: "16px", marginBottom: "8px", display: "block" }}>
+                <strong style={{ color: "#f0f6fc", fontSize: "18px", marginBottom: "12px", display: "block", fontWeight: "600" }}>
                   AI Document Editor
                 </strong>
                 Ask me to edit your Word document! I can read, edit, insert, delete, and format text.
                 <br />
                 <br />
-                <span style={{ color: "#858585", fontSize: "13px" }}>
+                <span style={{ color: "#8b949e", fontSize: "13px" }}>
                   Try: "Make the first paragraph bold" or "Replace 'hello' with 'hi'"
                 </span>
               </div>
@@ -334,6 +369,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                 <div
                   className={`${styles.messageBubble} ${message.role === "user" ? styles.userBubble : styles.assistantBubble
                     }`}
+                  style={{ whiteSpace: "pre-wrap" }}
                 >
                   {message.content}
                 </div>
@@ -368,6 +404,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
               className={styles.textarea}
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onPaste={handlePaste}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
@@ -375,20 +412,25 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                 }
               }}
               placeholder="Ask me to edit your document..."
-              style={{ whiteSpace: 'pre-wrap' }}
               disabled={isLoading}
               rows={1}
+              spellCheck={false}
+              autoComplete="off"
+              data-gramm="false"
+              data-gramm_editor="false"
+              data-enable-grammarly="false"
             />
             <button
               disabled={!input.trim() || isLoading}
               onClick={handleSend}
               className={styles.sendButton}
-              title="Send message"
+              title="Send message (Enter)"
+              type="button"
             >
               {isLoading ? (
                 <Spinner size="tiny" />
               ) : (
-                <SendRegular style={{ fontSize: "18px" }} />
+                <SendRegular style={{ fontSize: "14px" }} />
               )}
             </button>
           </div>
