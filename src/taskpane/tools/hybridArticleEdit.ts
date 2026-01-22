@@ -721,7 +721,7 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
             if (insertAsNewParagraph && targetParagraph) {
               // Insert as new paragraph(s) - split by newlines to preserve formatting
               // Determine the correct InsertLocation based on the location parameter
-              const paragraphInsertLocation = 
+              const initialInsertLocation = 
                 location === 'before' || location === 'end' 
                   ? Word.InsertLocation.before 
                   : Word.InsertLocation.after;
@@ -737,6 +737,8 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                 if (i === 0 && lineText.trim() === '' && textLines.length > 1) continue;
                 if (i === textLines.length - 1 && lineText.trim() === '' && textLines.length > 1) continue;
                 
+                // First paragraph uses initial location, subsequent ones always use 'after' to maintain order
+                const paragraphInsertLocation = i === 0 ? initialInsertLocation : Word.InsertLocation.after;
                 const newParagraph = lastParagraph.insertParagraph(lineText, paragraphInsertLocation);
                 context.load(newParagraph, ['style']);
                 await context.sync();
