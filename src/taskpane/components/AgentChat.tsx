@@ -5,7 +5,7 @@ import {
   makeStyles,
   Spinner,
 } from "@fluentui/react-components";
-import { SparkleFilled, CheckmarkCircleFilled, DismissCircleFilled, ArrowUpRegular, EditRegular, ChatRegular, ChevronDownRegular } from "@fluentui/react-icons";
+import { SparkleFilled, CheckmarkCircleFilled, DismissCircleFilled, ArrowUpRegular, EditRegular, ChatRegular } from "@fluentui/react-icons";
 import { generateAgentResponse } from "../agent/wordAgent";
 import { createChangeTracker } from "../utils/changeTracker";
 import { DocumentChange, ChangeTracking } from "../types/changes";
@@ -123,7 +123,8 @@ const useStyles = makeStyles({
     border: "1px solid #30363d",
     borderRadius: "8px",
     padding: "6px 12px",
-    paddingBottom: "36px",
+    // Reserve a non-typable "toolbar lane" at the bottom
+    paddingBottom: "44px",
     position: "relative",
     resize: "none",
     overflowY: "auto",
@@ -159,12 +160,17 @@ const useStyles = makeStyles({
   },
   buttonRow: {
     position: "absolute",
-    bottom: "2px",
-    left: "2px",
-    right: "2px",
+    bottom: "6px",
+    left: "6px",
+    right: "6px",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
+    // Opaque bar so text never shows behind buttons
+    backgroundColor: "rgba(13, 17, 23, 0.96)",
+    backdropFilter: "blur(6px)",
+    borderRadius: "6px",
+    padding: "2px 2px",
     pointerEvents: "none",
     zIndex: 10,
   },
@@ -180,54 +186,68 @@ const useStyles = makeStyles({
     alignItems: "center",
     pointerEvents: "auto",
   },
+  modeSelectWrap: {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    padding: "0 4px",
+    height: "24px",
+    borderRadius: "6px",
+    backgroundColor: "#21262d",
+    border: "1px solid #30363d",
+    color: "#c9d1d9",
+    pointerEvents: "auto",
+  },
+  modeSelectIcon: {
+    display: "flex",
+    alignItems: "center",
+    color: "#c9d1d9",
+    opacity: 0.9,
+  },
+  modeSelect: {
+    appearance: "none",
+    backgroundColor: "transparent",
+    color: "#c9d1d9",
+    border: "none",
+    fontSize: "10px",
+    fontWeight: 600,
+    outline: "none",
+    cursor: "pointer",
+    paddingRight: "10px",
+  },
+  modeSelectChevron: {
+    width: 0,
+    height: 0,
+    borderLeft: "4px solid transparent",
+    borderRight: "4px solid transparent",
+    borderTop: "5px solid #8b949e",
+    opacity: 0.9,
+    marginLeft: "-6px",
+  },
   modeSelector: {
     padding: "4px 8px",
     fontSize: "10px",
     borderRadius: "5px",
-    border: "1px solid #30363d",
+    border: "none",
     backgroundColor: "#21262d",
     color: "#c9d1d9",
     cursor: "pointer",
     fontWeight: "500",
-    transition: "background 0.15s ease, border-color 0.15s ease",
+    transition: "background 0.15s ease",
     whiteSpace: "nowrap",
     height: "24px",
     display: "flex",
     alignItems: "center",
     gap: "4px",
-    position: "relative",
     "&:hover": {
       backgroundColor: "#30363d",
-      borderColor: "#484f58",
     } as any,
   },
-  modeSelectorDropdown: {
-    position: "absolute",
-    bottom: "100%",
-    left: "0",
-    marginBottom: "4px",
-    backgroundColor: "#1c2128",
-    border: "1px solid #30363d",
-    borderRadius: "6px",
-    overflow: "hidden",
-    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)",
-    zIndex: 100,
-    minWidth: "100px",
-  },
-  modeSelectorOption: {
-    padding: "6px 12px",
-    fontSize: "11px",
-    color: "#c9d1d9",
-    cursor: "pointer",
-    display: "flex",
-    alignItems: "center",
-    gap: "6px",
-    backgroundColor: "transparent",
-    border: "none",
-    width: "100%",
-    textAlign: "left",
+  modeSelectorActive: {
+    backgroundColor: "#1f6feb",
+    color: "#ffffff",
     "&:hover": {
-      backgroundColor: "#30363d",
+      backgroundColor: "#0969da",
     } as any,
   },
   sendButton: {
@@ -264,8 +284,8 @@ const useStyles = makeStyles({
     padding: "4px 8px",
     fontSize: "10px",
     borderRadius: "5px",
-    border: "none",
-    backgroundColor: "rgba(137, 209, 133, 0.15)",
+    border: "1px solid rgba(46, 160, 67, 0.35)",
+    backgroundColor: "rgba(46, 160, 67, 0.18)",
     color: "#89d185",
     cursor: "pointer",
     fontWeight: "500",
@@ -276,25 +296,26 @@ const useStyles = makeStyles({
     alignItems: "center",
     pointerEvents: "auto",
     "&:hover:not(:disabled)": {
-      backgroundColor: "rgba(137, 209, 133, 0.25)",
+      backgroundColor: "rgba(46, 160, 67, 0.26)",
     } as any,
     "&:active:not(:disabled)": {
-      backgroundColor: "rgba(137, 209, 133, 0.35)",
+      backgroundColor: "rgba(46, 160, 67, 0.32)",
     } as any,
     "&:disabled": {
       opacity: 0.5,
       cursor: "not-allowed",
-      backgroundColor: "rgba(48, 54, 61, 0.5)",
+      backgroundColor: "#30363d",
     },
   },
   bulkButtonReject: {
-    backgroundColor: "rgba(244, 135, 113, 0.15)",
+    border: "1px solid rgba(248, 81, 73, 0.35)",
+    backgroundColor: "rgba(248, 81, 73, 0.18)",
     color: "#f48771",
     "&:hover:not(:disabled)": {
-      backgroundColor: "rgba(244, 135, 113, 0.25)",
+      backgroundColor: "rgba(248, 81, 73, 0.26)",
     } as any,
     "&:active:not(:disabled)": {
-      backgroundColor: "rgba(244, 135, 113, 0.35)",
+      backgroundColor: "rgba(248, 81, 73, 0.32)",
     } as any,
   },
   thinking: {
@@ -491,8 +512,6 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<"edit" | "ask">("edit");
-  const [showModeDropdown, setShowModeDropdown] = useState<boolean>(false);
-  const modeDropdownRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [changeTracker] = useState<ChangeTracking>(() => createChangeTracker());
@@ -523,24 +542,6 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
-
-  // Close mode dropdown when clicking outside
-  useEffect(() => {
-    if (!showModeDropdown) {
-      return undefined;
-    }
-
-    const handleClickOutside = (event: MouseEvent) => {
-      if (modeDropdownRef.current && !modeDropdownRef.current.contains(event.target as Node)) {
-        setShowModeDropdown(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [showModeDropdown]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -600,6 +601,15 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
     setMessages(newMessages);
 
     try {
+      const askOnlyAgent =
+        mode === "ask"
+          ? {
+              ...agent,
+              tools: {},
+              system: `${(agent as any).system || ""}\n\nMODE: ASK. Do not call any tools. Do not edit the document. Answer conversationally and concisely.`,
+            }
+          : agent;
+
       // HYBRID PATH: Algorithm for parsing/finding, minimal AI for insertion
       // Match ARTICLE X-Y where X is any letter and Y is any number (e.g., A-1, X-67)
       // Also match instructions that start with article name followed by edits
@@ -608,7 +618,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
       let response: string;
       let hybridSucceeded: boolean | null = null;
       let hybridError: string | undefined;
-      if (hasArticleInstructions) {
+      if (hasArticleInstructions && mode === "edit") {
         // Hybrid execution: Algorithm parses/finds, AI only for final insertion (fast like Cursor)
         const result = await executeArticleInstructionsHybrid(userMessage, agent.apiKey, agent.model);
         hybridSucceeded = result.success;
@@ -617,7 +627,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
         response = result.success ? "" : `Error: ${result.error || 'Unknown error'}`;
       } else {
         // Get response from agent (changes will be tracked automatically via the agent's onChange callback)
-        response = await generateAgentResponse(agent, userMessage);
+        response = await generateAgentResponse(askOnlyAgent, userMessage);
       }
 
       // Get changes for this message
@@ -1007,47 +1017,23 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
               data-enable-grammarly="false"
             />
             <div className={styles.buttonRow}>
-              <div className={styles.buttonRowLeft} ref={modeDropdownRef}>
-                <button
-                  className={styles.modeSelector}
-                  type="button"
-                  onClick={() => setShowModeDropdown(!showModeDropdown)}
-                  title={`${mode === "edit" ? "Edit" : "Ask"} mode`}
-                >
-                  {mode === "edit" ? (
-                    <EditRegular style={{ fontSize: "12px" }} />
-                  ) : (
-                    <ChatRegular style={{ fontSize: "12px" }} />
-                  )}
-                  {mode === "edit" ? "Edit" : "Ask"}
-                  <ChevronDownRegular style={{ fontSize: "10px", marginLeft: "2px" }} />
-                </button>
-                {showModeDropdown && (
-                  <div className={styles.modeSelectorDropdown}>
-                    <button
-                      className={styles.modeSelectorOption}
-                      type="button"
-                      onClick={() => {
-                        setMode("edit");
-                        setShowModeDropdown(false);
-                      }}
-                    >
-                      <EditRegular style={{ fontSize: "12px" }} />
-                      Edit
-                    </button>
-                    <button
-                      className={styles.modeSelectorOption}
-                      type="button"
-                      onClick={() => {
-                        setMode("ask");
-                        setShowModeDropdown(false);
-                      }}
-                    >
-                      <ChatRegular style={{ fontSize: "12px" }} />
-                      Ask
-                    </button>
-                  </div>
-                )}
+              <div className={styles.buttonRowLeft}>
+                <div className={styles.modeSelectWrap} title="Mode">
+                  <span className={styles.modeSelectIcon}>
+                    {mode === "edit" ? <EditRegular style={{ fontSize: "12px" }} /> : <ChatRegular style={{ fontSize: "12px" }} />}
+                  </span>
+                  <select
+                    className={styles.modeSelect}
+                    value={mode}
+                    onChange={(e) => setMode(e.target.value as "edit" | "ask")}
+                    disabled={isLoading}
+                    aria-label="Mode"
+                  >
+                    <option value="edit">Edit</option>
+                    <option value="ask">Ask</option>
+                  </select>
+                  <span className={styles.modeSelectChevron} />
+                </div>
               </div>
               <div className={styles.buttonRowRight}>
                 {pendingChangeCount > 0 && (
