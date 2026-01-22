@@ -300,6 +300,7 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
             let insertLocation: Word.InsertLocation;
             let range: Word.Range;
             let targetParagraph: Word.Paragraph | null = null;
+            let foundRange: Word.Range | null = null;
             
             if (location === 'beginning') {
               range = startRange;
@@ -499,7 +500,30 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                 }
               }
               
+              let fallbackParagraph: Word.Paragraph | null = null;
               if (searchResults.items.length === 0) {
+                // Last-resort fallback: find paragraph by text match (bypass Word search)
+                const articleParagraphs: Word.Paragraph[] = [];
+                for (let i = articleBoundaries.startParagraphIndex; i <= articleBoundaries.endParagraphIndex; i++) {
+                  articleParagraphs.push(paragraphs.items[i]);
+                }
+                
+                for (const para of articleParagraphs) {
+                  context.load(para, 'text');
+                }
+                await context.sync();
+                
+                const normalizedNeedle = normalizeSearchText(searchText).toLowerCase();
+                for (const para of articleParagraphs) {
+                  const normalizedHaystack = normalizeSearchText(para.text || '').toLowerCase();
+                  if (normalizedHaystack.includes(normalizedNeedle)) {
+                    fallbackParagraph = para;
+                    break;
+                  }
+                }
+              }
+              
+              if (searchResults.items.length === 0 && !fallbackParagraph) {
                 // Get article content snippet for better error message
                 context.load(articleRange, 'text');
                 await context.sync();
@@ -511,52 +535,66 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
               // Log the search for debugging
               console.log(`[insertText] Searching for: "${searchText}", found ${searchResults.items.length} match(es) in ARTICLE ${articleName}`);
               
-              // Use the first match (most relevant)
-              const foundRange = searchResults.items[0];
-              targetParagraph = foundRange.paragraphs.getFirst();
-              context.load(targetParagraph, ['listItem', 'list', 'text', 'style']);
-              
-              // Get paragraph text to check context
-              context.load(targetParagraph, 'text');
-              await context.sync();
-              const paragraphText = targetParagraph.text || '';
-              
-              // Check if the found text is at the very beginning of the paragraph
-              // (allowing for minimal whitespace)
-              // Use the actual found text from the range, not searchText (which might have different punctuation)
-              context.load(foundRange, 'text');
-              await context.sync();
-              const actualFoundText = foundRange.text || '';
-              const foundTextStart = paragraphText.toLowerCase().indexOf(actualFoundText.toLowerCase());
-              const textBeforeMatch = foundTextStart >= 0 ? paragraphText.substring(0, foundTextStart).trim() : '';
-              
-              if (location === 'inline') {
-                // Inline: insert right after the found text (within the sentence)
-                range = foundRange;
-                insertLocation = Word.InsertLocation.after;
-              } else if (location === 'before') {
-                // "Before" means: insert right before the found text
-                // Check if the text is at the very start of the paragraph
-                if (textBeforeMatch.length === 0) {
-                  // Text is at paragraph start - insert as new paragraph before this paragraph
+              if (searchResults.items.length > 0) {
+                // Use the first match (most relevant)
+                foundRange = searchResults.items[0];
+                targetParagraph = foundRange.paragraphs.getFirst();
+                context.load(targetParagraph, ['listItem', 'list', 'text', 'style']);
+                
+                // Get paragraph text to check context
+                context.load(targetParagraph, 'text');
+                await context.sync();
+                const paragraphText = targetParagraph.text || '';
+                
+                // Check if the found text is at the very beginning of the paragraph
+                // (allowing for minimal whitespace)
+                // Use the actual found text from the range, not searchText (which might have different punctuation)
+                context.load(foundRange, 'text');
+                await context.sync();
+                const actualFoundText = foundRange.text || '';
+                const foundTextStart = paragraphText.toLowerCase().indexOf(actualFoundText.toLowerCase());
+                const textBeforeMatch = foundTextStart >= 0 ? paragraphText.substring(0, foundTextStart).trim() : '';
+                
+                if (location === 'inline') {
+                  // Inline: insert right after the found text (within the sentence)
+                  range = foundRange;
+                  insertLocation = Word.InsertLocation.after;
+                } else if (location === 'before') {
+                  // "Before" means: insert right before the found text
+                  // Check if the text is at the very start of the paragraph
+                  if (textBeforeMatch.length === 0) {
+                    // Text is at paragraph start - insert as new paragraph before this paragraph
+                    range = targetParagraph.getRange('Start');
+                    insertLocation = Word.InsertLocation.before;
+                  } else {
+                    // Text is in the middle or end of paragraph - insert right before the found text
+                    range = foundRange;
+                    insertLocation = Word.InsertLocation.before;
+                  }
+                } else {
+                  // For "after", check if we should insert after paragraph or after text
+                  // If text is at end of paragraph, insert after paragraph; otherwise after text
+                  const textAfterMatch = paragraphText.substring(foundTextStart + foundRange.text.length).trim();
+                  if (textAfterMatch.length === 0 || textAfterMatch.length < 5) {
+                    // Text is at or near end of paragraph - insert after paragraph
+                    range = targetParagraph.getRange('End');
+                    insertLocation = Word.InsertLocation.after;
+                  } else {
+                    // Text is in middle - insert right after the found text
+                    range = foundRange;
+                    insertLocation = Word.InsertLocation.after;
+                  }
+                }
+              } else if (fallbackParagraph) {
+                targetParagraph = fallbackParagraph;
+                
+                if (location === 'inline') {
+                  throw new Error('Unable to locate inline insertion point via Word search. Please use a longer, more specific searchText from readDocument.');
+                } else if (location === 'before') {
                   range = targetParagraph.getRange('Start');
                   insertLocation = Word.InsertLocation.before;
                 } else {
-                  // Text is in the middle or end of paragraph - insert right before the found text
-                  range = foundRange;
-                  insertLocation = Word.InsertLocation.before;
-                }
-              } else {
-                // For "after", check if we should insert after paragraph or after text
-                // If text is at end of paragraph, insert after paragraph; otherwise after text
-                const textAfterMatch = paragraphText.substring(foundTextStart + foundRange.text.length).trim();
-                if (textAfterMatch.length === 0 || textAfterMatch.length < 5) {
-                  // Text is at or near end of paragraph - insert after paragraph
                   range = targetParagraph.getRange('End');
-                  insertLocation = Word.InsertLocation.after;
-                } else {
-                  // Text is in middle - insert right after the found text
-                  range = foundRange;
                   insertLocation = Word.InsertLocation.after;
                 }
               }
