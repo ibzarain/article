@@ -419,12 +419,15 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
       const hasArticleInstructions = /ARTICLE\s+[A-Z]-\d+/i.test(userMessage) && (/\.\d+\s+(Add|Delete|Substitute|Replace)/i.test(userMessage) || /\.\d+\s+[A-Z]/i.test(userMessage));
 
       let response: string;
+      let hybridSucceeded: boolean | null = null;
+      let hybridError: string | undefined;
       if (hasArticleInstructions) {
         // Hybrid execution: Algorithm parses/finds, AI only for final insertion (fast like Cursor)
         const result = await executeArticleInstructionsHybrid(userMessage, agent.apiKey, agent.model);
-        response = result.success
-          ? `Applied ${result.results?.length || 0} article operation(s) successfully. ${result.results?.join('; ') || ''}`
-          : `Error: ${result.error || 'Unknown error'}`;
+        hybridSucceeded = result.success;
+        hybridError = result.error;
+        // Keep the visible chat response minimal; UI will show the diffs + accept/reject.
+        response = result.success ? "" : `Error: ${result.error || 'Unknown error'}`;
       } else {
         // Get response from agent (changes will be tracked automatically via the agent's onChange callback)
         response = await generateAgentResponse(agent, userMessage);
@@ -433,6 +436,17 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
       // Get changes for this message
       const messageChanges = [...currentMessageChangesRef.current];
       const assistantMessageId = `msg-${messageIdCounter.current++}`;
+
+      // For ARTICLE/hybrid instructions: keep assistant text minimal and avoid verbose summaries.
+      if (hasArticleInstructions) {
+        if (!hybridSucceeded) {
+          response = `Error: ${hybridError || "Unknown error"}`;
+        } else if (messageChanges.length === 0) {
+          response = "No changes were necessary.";
+        } else {
+          response = `Proposed ${messageChanges.length} change(s). Review and accept/reject below.`;
+        }
+      }
 
       // Add assistant response with associated changes
       setMessages([

@@ -1049,7 +1049,7 @@ export async function executeArticleInstructionsHybrid(
     console.log(`  Start paragraph: ${articleBoundaries.startParagraphIndex}`);
     console.log(`  End paragraph: ${articleBoundaries.endParagraphIndex}`);
     console.log(`  Content length: ${articleBoundaries.articleContent.length} characters`);
-    console.log(`  Full content:`, articleBoundaries.articleContent);
+    // Intentionally do NOT log full article content (too verbose / may contain sensitive text)
 
     // Create scoped tools that only work within the article
     const scopedReadDocument = createScopedReadDocumentTool(articleBoundaries);
@@ -1078,46 +1078,40 @@ CURRENT ARTICLE CONTENT (for reference):
 ${articleContentPreview}
 
 AVAILABLE TOOLS:
-- readDocument: SEARCH tool - Search ARTICLE ${articleName} for a query and return contextual snippets around each match. MANDATORY: Call this FIRST before any insert/edit/delete. Returns matches with snippets showing context. Use the matchText from results as searchText. IMPORTANT: If you call readDocument with query "*" or "all", it will return the FULL article content. You MUST call this at the start to get the full article content and return it to the user.
+- readDocument: SEARCH tool - Search ARTICLE ${articleName} for a query and return contextual snippets around each match. MANDATORY: Call this BEFORE any insert/edit/delete to find the exact location text (use matchText as searchText). Do NOT call it with "*" / "all" unless the user explicitly asks to see the full article.
 - editDocument: Find and replace text within ARTICLE ${articleName} only. Requires searchText from readDocument results.
 - insertText: Insert new text within ARTICLE ${articleName} only. MANDATORY: Requires searchText from readDocument results. If user says "before X", you MUST find X via readDocument first, then use that matchText as searchText with location: "before". IMPORTANT: When extracting the text to insert from the user's instruction, preserve ALL newlines (\\n) and formatting exactly as provided. The text parameter must include newline characters where the user has line breaks.
 - deleteText: Delete text from ARTICLE ${articleName} only. Requires searchText from readDocument results.
 
 MANDATORY WORKFLOW - FOLLOW THIS EXACTLY:
-1. FIRST STEP - GET FULL ARTICLE CONTENT:
-   - IMMEDIATELY call readDocument with query "*" or "all" to get the FULL article content
-   - This will return the complete article text
-   - You MUST return this full article content to the user in your response
-   - Log it: "Here is the full content of ARTICLE ${articleName} that I found: [full content]"
+1. UNDERSTAND the user's instruction. If they say "before 'The Construction Manager shall:'", you MUST find that exact text or a close variation.
 
-2. UNDERSTAND the user's instruction. If they say "before 'The Construction Manager shall:'", you MUST find that exact text or a close variation.
-
-3. ALWAYS call readDocument with the specific text the user specified:
+2. ALWAYS call readDocument with the specific text the user specified:
    - If user says "before 'The Construction Manager shall:'", search for "The Construction Manager shall" (with or without colon)
    - Review the readDocument results - you MUST see matches before proceeding
    - If no matches found, try variations: "Construction Manager shall", "The Construction Manager", etc.
    - DO NOT proceed to insert/edit until you've found the location via readDocument
 
-4. Once readDocument returns matches:
+3. Once readDocument returns matches:
    - Use the EXACT matchText from the results as searchText for insertText
    - If multiple matches, use the first one (or the one that makes sense in context)
    - Call insertText with location: "before" and the matchText as searchText
 
-5. CRITICAL: If readDocument doesn't find the text after multiple searches:
+4. CRITICAL: If readDocument doesn't find the text after multiple searches:
    - Report what you searched for and that it wasn't found
    - DO NOT default to "beginning" or "end" - that's wrong!
    - Ask the user for clarification or an alternative search term
 
-6. NEVER insert at "beginning" or "end" unless the user explicitly asks for that. If user says "before X", you MUST find X first.
+5. NEVER insert at "beginning" or "end" unless the user explicitly asks for that. If user says "before X", you MUST find X first.
 
-7. Use ONE tool call at a time. Wait for the tool result before deciding the next action.
+6. Use ONE tool call at a time. Wait for the tool result before deciding the next action.
 
-8. For insertText: location "before"/"after"/"inline" requires searchText from readDocument results.
+7. For insertText: location "before"/"after"/"inline" requires searchText from readDocument results.
 
-9. FINAL STEP: After completing all edits, return a summary that includes:
-   - The full article content you retrieved at the start
-   - What changes you made
-   - Confirmation that edits were applied
+8. FINAL RESPONSE (KEEP IT MINIMAL):
+   - Do NOT paste full article content.
+   - Do NOT write a detailed summary or "Changes Made".
+   - Respond with a single short sentence, e.g. "Done." or "Proposed changes below."
 
 The user has provided the following instructions for ARTICLE ${articleName}:
 ${instruction}
