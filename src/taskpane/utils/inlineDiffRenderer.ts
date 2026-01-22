@@ -134,8 +134,15 @@ export async function renderInlineDiff(change: DocumentChange): Promise<void> {
       }
     });
   } catch (error) {
-    console.error('Error rendering inline diff:', error);
-    throw error;
+    // Best-effort: inline diff rendering should never break the primary operation
+    // (insert/edit/delete). Office.js can throw opaque errors (e.g. "We couldn't find
+    // the item you requested") depending on range invalidation / timing.
+    console.error('Error rendering inline diff (best-effort):', {
+      changeId: change.id,
+      changeType: change.type,
+      error,
+    });
+    return;
   }
 }
 

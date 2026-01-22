@@ -230,6 +230,11 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
       },
       execute: async ({ searchText, newText, replaceAll, matchCase, matchWholeWord }: any) => {
         try {
+          const warnings: string[] = [];
+
+          // First, locate the target text within the article and capture the actual
+          // matched text. Do NOT call renderInlineDiff/changeTracker inside Word.run
+          // because renderInlineDiff uses Word.run internally (nested Word.run is unstable).
           const result = await Word.run(async (context) => {
             // Get article range
             const paragraphs = context.document.body.paragraphs;
@@ -256,6 +261,7 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
             
             const itemsToReplace = replaceAll ? searchResults.items : [searchResults.items[0]];
             let replacementCount = 0;
+            const capturedOldTexts: string[] = [];
             
             for (const item of itemsToReplace) {
               context.load(item, 'text');
@@ -263,27 +269,7 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
               const actualOldText = item.text;
               
               replacementCount++;
-              
-              // Track the change (renderInlineDiff will handle the visual diff)
-              if (changeTracker) {
-                const changeObj: DocumentChange = {
-                  type: 'edit',
-                  description: `Replaced "${actualOldText}" with "${newText}"`,
-                  oldText: actualOldText,
-                  newText: newText,
-                  searchText: searchText,
-                  id: `change_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                  timestamp: new Date(),
-                  applied: false,
-                  canUndo: true,
-                };
-                
-                // Render inline diff (this will show old text with strikethrough/red and new text in green)
-                await renderInlineDiff(changeObj);
-                
-                // Track the change
-                await changeTracker(changeObj);
-              }
+              capturedOldTexts.push(actualOldText);
             }
             
             await context.sync();
@@ -291,14 +277,60 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
             return {
               replaced: replacementCount,
               totalFound: searchResults.items.length,
+              capturedOldTexts,
             };
           });
+
+          // Second, render the inline diff + record the change OUTSIDE Word.run (best-effort).
+          if (changeTracker) {
+            const oldTexts = Array.isArray((result as any).capturedOldTexts)
+              ? ((result as any).capturedOldTexts as string[])
+              : [];
+
+            // Keep behavior similar to before: render a diff per targeted occurrence.
+            // Note: renderInlineDiff currently searches by `searchText` and uses the first match,
+            // so replaceAll may still behave unexpectedly in documents with repeated matches.
+            for (const oldText of oldTexts.length > 0 ? oldTexts : [searchText]) {
+              const changeObj: DocumentChange = {
+                type: 'edit',
+                description: `Replaced "${oldText}" with "${newText}"`,
+                oldText: oldText,
+                newText: newText,
+                searchText: searchText,
+                id: `change_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                timestamp: new Date(),
+                applied: false,
+                canUndo: true,
+              };
+
+              try {
+                await renderInlineDiff(changeObj);
+              } catch (e) {
+                warnings.push(
+                  `Edit succeeded, but failed to render inline diff: ${
+                    e instanceof Error ? e.message : String(e)
+                  }`
+                );
+              }
+
+              try {
+                await changeTracker(changeObj);
+              } catch (e) {
+                warnings.push(
+                  `Edit succeeded, but failed to record change: ${
+                    e instanceof Error ? e.message : String(e)
+                  }`
+                );
+              }
+            }
+          }
           
           return {
             success: true,
             replaced: result.replaced,
             totalFound: result.totalFound,
             message: `Replaced ${result.replaced} occurrence(s) of "${searchText}" with "${newText}"`,
+            ...(warnings.length > 0 ? { warnings } : {}),
           };
         } catch (error) {
           return {
@@ -325,6 +357,8 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
       },
       execute: async ({ text, location, searchText }: any) => {
         try {
+          const warnings: string[] = [];
+
           const result = await Word.run(async (context) => {
             // Get article range
             const paragraphs = context.document.body.paragraphs;
@@ -539,26 +573,25 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                 }
               }
               
+              // ALWAYS set up fallback paragraph BEFORE trying to use Word search results
+              // This way we have a backup if Word search returns invalid results
               let fallbackParagraph: Word.Paragraph | null = null;
-              if (searchResults.items.length === 0) {
-                // Last-resort fallback: find paragraph by text match (bypass Word search)
-                const articleParagraphs: Word.Paragraph[] = [];
-                for (let i = articleBoundaries.startParagraphIndex; i <= articleBoundaries.endParagraphIndex; i++) {
-                  articleParagraphs.push(paragraphs.items[i]);
-                }
-                
-                for (const para of articleParagraphs) {
-                  context.load(para, 'text');
-                }
-                await context.sync();
-                
-                const normalizedNeedle = normalizeSearchText(searchText).toLowerCase();
-                for (const para of articleParagraphs) {
-                  const normalizedHaystack = normalizeSearchText(para.text || '').toLowerCase();
-                  if (normalizedHaystack.includes(normalizedNeedle)) {
-                    fallbackParagraph = para;
-                    break;
-                  }
+              const articleParagraphs: Word.Paragraph[] = [];
+              for (let i = articleBoundaries.startParagraphIndex; i <= articleBoundaries.endParagraphIndex; i++) {
+                articleParagraphs.push(paragraphs.items[i]);
+              }
+              
+              for (const para of articleParagraphs) {
+                context.load(para, 'text');
+              }
+              await context.sync();
+              
+              const normalizedNeedle = normalizeSearchText(searchText).toLowerCase();
+              for (const para of articleParagraphs) {
+                const normalizedHaystack = normalizeSearchText(para.text || '').toLowerCase();
+                if (normalizedHaystack.includes(normalizedNeedle)) {
+                  fallbackParagraph = para;
+                  break;
                 }
               }
               
@@ -574,29 +607,43 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
               // Log the search for debugging
               console.log(`[insertText] Searching for: "${searchText}", found ${searchResults.items.length} match(es) in ARTICLE ${articleName}`);
               
+              // Try to use Word search results, but fall back to paragraph-based if it fails
+              let useWordSearch = false;
               if (searchResults.items.length > 0) {
-                // Use the first match (most relevant)
-                foundRange = searchResults.items[0];
-                targetParagraph = foundRange.paragraphs.getFirst();
-                context.load(targetParagraph, ['listItem', 'list', 'text', 'style']);
-                
-                // Get paragraph text to check context
-                context.load(targetParagraph, 'text');
-                await context.sync();
+                try {
+                  // Use the first match (most relevant)
+                  foundRange = searchResults.items[0];
+                  targetParagraph = foundRange.paragraphs.getFirst();
+                  context.load(targetParagraph, ['listItem', 'list', 'text', 'style']);
+                  
+                  // Get paragraph text to check context
+                  context.load(targetParagraph, 'text');
+                  await context.sync();
+                  
+                  // If we got here, Word search worked
+                  useWordSearch = true;
+                } catch (error) {
+                  // Word search returned results but we can't use them - fall back to paragraph search
+                  console.warn(`[insertText] Word search found results but couldn't access them, using fallback:`, error);
+                  useWordSearch = false;
+                }
+              }
+              
+              if (useWordSearch && targetParagraph) {
                 const paragraphText = targetParagraph.text || '';
                 
                 // Check if the found text is at the very beginning of the paragraph
                 // (allowing for minimal whitespace)
                 // Use the actual found text from the range, not searchText (which might have different punctuation)
-                context.load(foundRange, 'text');
+                context.load(foundRange!, 'text');
                 await context.sync();
-                const actualFoundText = foundRange.text || '';
+                const actualFoundText = foundRange!.text || '';
                 const foundTextStart = paragraphText.toLowerCase().indexOf(actualFoundText.toLowerCase());
                 const textBeforeMatch = foundTextStart >= 0 ? paragraphText.substring(0, foundTextStart).trim() : '';
                 
                 if (location === 'inline') {
                   // Inline: insert right after the found text (within the sentence)
-                  range = foundRange;
+                  range = foundRange!;
                   insertLocation = Word.InsertLocation.after;
                 } else if (location === 'before') {
                   // "Before" means: insert right before the found text
@@ -607,20 +654,20 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                     insertLocation = Word.InsertLocation.before;
                   } else {
                     // Text is in the middle or end of paragraph - insert right before the found text
-                    range = foundRange;
+                    range = foundRange!;
                     insertLocation = Word.InsertLocation.before;
                   }
                 } else {
                   // For "after", check if we should insert after paragraph or after text
                   // If text is at end of paragraph, insert after paragraph; otherwise after text
-                  const textAfterMatch = paragraphText.substring(foundTextStart + foundRange.text.length).trim();
+                  const textAfterMatch = paragraphText.substring(foundTextStart + foundRange!.text.length).trim();
                   if (textAfterMatch.length === 0 || textAfterMatch.length < 5) {
                     // Text is at or near end of paragraph - insert after paragraph
                     range = targetParagraph.getRange('End');
                     insertLocation = Word.InsertLocation.after;
                   } else {
                     // Text is in middle - insert right after the found text
-                    range = foundRange;
+                    range = foundRange!;
                     insertLocation = Word.InsertLocation.after;
                   }
                 }
@@ -712,36 +759,54 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
             // Apply green color to inserted text immediately
             insertedRange.font.color = '#89d185';
             await context.sync();
-            
-            // Track the change (text is already green from above)
-            if (changeTracker) {
-              const changeObj: DocumentChange = {
-                type: 'insert',
-                description: `Inserted "${text}" ${location}${searchText ? ` "${searchText}"` : ''}`,
-                newText: text,
-                searchText: searchText || location,
-                location: location,
-                id: `change_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                timestamp: new Date(),
-                applied: false,
-                canUndo: true,
-              };
-              
-              // Render inline diff (will ensure text is green if not already)
-              await renderInlineDiff(changeObj);
-              
-              // Track the change
-              await changeTracker(changeObj);
-            }
-            
+
             return {
               inserted: true,
             };
           });
-          
+
+          // IMPORTANT: Do NOT call renderInlineDiff/changeTracker inside Word.run.
+          // renderInlineDiff uses Word.run internally; nesting Word.run often causes
+          // opaque Office errors like "We couldn't find the item you requested".
+          if (changeTracker) {
+            const changeObj: DocumentChange = {
+              type: 'insert',
+              description: `Inserted "${text}" ${location}${searchText ? ` "${searchText}"` : ''}`,
+              newText: text,
+              searchText: searchText || location,
+              location: location,
+              id: `change_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              timestamp: new Date(),
+              applied: false,
+              canUndo: true,
+            };
+
+            // Best-effort diff rendering + tracking. Insert itself already happened.
+            try {
+              await renderInlineDiff(changeObj);
+            } catch (e) {
+              warnings.push(
+                `Inserted text successfully, but failed to render inline diff: ${
+                  e instanceof Error ? e.message : String(e)
+                }`
+              );
+            }
+
+            try {
+              await changeTracker(changeObj);
+            } catch (e) {
+              warnings.push(
+                `Inserted text successfully, but failed to record change: ${
+                  e instanceof Error ? e.message : String(e)
+                }`
+              );
+            }
+          }
+
           return {
             success: true,
             message: `Text inserted successfully at ${location}`,
+            ...(warnings.length > 0 ? { warnings } : {}),
           };
         } catch (error) {
           return {
