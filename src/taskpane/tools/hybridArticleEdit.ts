@@ -719,34 +719,143 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
             let insertedRange: Word.Range;
 
             if (insertAsNewParagraph && targetParagraph) {
-              // Insert as a new paragraph (preserves formatting better for multiline text)
+              // Insert as new paragraph(s) - split by newlines to preserve formatting
               // Determine the correct InsertLocation based on the location parameter
               const paragraphInsertLocation = 
                 location === 'before' || location === 'end' 
                   ? Word.InsertLocation.before 
                   : Word.InsertLocation.after;
-              const newParagraph = targetParagraph.insertParagraph(text, paragraphInsertLocation);
-              context.load(newParagraph, ['style']);
-              await context.sync();
-
-              // Preserve paragraph style if it exists
-              if (targetParagraph.style && targetParagraph.style !== 'Normal') {
-                newParagraph.style = targetParagraph.style;
+              
+              // Split text by newlines to create multiple paragraphs if needed
+              const textLines = text.split('\n');
+              let firstParagraph: Word.Paragraph | null = null;
+              let lastParagraph: Word.Paragraph = targetParagraph;
+              
+              for (let i = 0; i < textLines.length; i++) {
+                const lineText = textLines[i];
+                // Skip empty lines at the start/end but preserve them in the middle
+                if (i === 0 && lineText.trim() === '' && textLines.length > 1) continue;
+                if (i === textLines.length - 1 && lineText.trim() === '' && textLines.length > 1) continue;
+                
+                const newParagraph = lastParagraph.insertParagraph(lineText, paragraphInsertLocation);
+                context.load(newParagraph, ['style']);
                 await context.sync();
-              }
 
-              insertedRange = newParagraph.getRange();
+                // Preserve paragraph style if it exists
+                if (targetParagraph.style && targetParagraph.style !== 'Normal') {
+                  newParagraph.style = targetParagraph.style;
+                  await context.sync();
+                }
+                
+                if (firstParagraph === null) {
+                  firstParagraph = newParagraph;
+                }
+                lastParagraph = newParagraph;
+              }
+              
+              // Use the range of all inserted paragraphs
+              if (firstParagraph) {
+                insertedRange = firstParagraph.getRange().expandTo(lastParagraph.getRange());
+              } else {
+                // Fallback if no paragraphs were created
+                const newParagraph = targetParagraph.insertParagraph(text, paragraphInsertLocation);
+                context.load(newParagraph, ['style']);
+                await context.sync();
+                if (targetParagraph.style && targetParagraph.style !== 'Normal') {
+                  newParagraph.style = targetParagraph.style;
+                  await context.sync();
+                }
+                insertedRange = newParagraph.getRange();
+              }
             } else if (location === 'inline') {
               // Inline insertion: insert text directly after found text
-              const textToInsert = text.startsWith(' ') || text.startsWith('\n') ? text : ' ' + text;
+              // Convert newlines to spaces for inline insertion
+              const textToInsert = (text.startsWith(' ') || text.startsWith('\n') ? text : ' ' + text)
+                .replace(/\n/g, ' ');
               insertedRange = range.insertText(textToInsert, Word.InsertLocation.after);
             } else if (location === 'after') {
-              // Inserting after found text - add space if needed for inline insertion
-              const textToInsert = text.startsWith(' ') || text.startsWith('\n') ? text : ' ' + text;
-              insertedRange = range.insertText(textToInsert, Word.InsertLocation.after);
+              // Inserting after found text - handle newlines properly
+              if (text.includes('\n')) {
+                // If text has newlines, insert as paragraphs
+                const textLines = text.split('\n');
+                let firstParagraph: Word.Paragraph | null = null;
+                let lastParagraph: Word.Paragraph = targetParagraph;
+                
+                for (let i = 0; i < textLines.length; i++) {
+                  const lineText = textLines[i];
+                  if (i === 0 && lineText.trim() === '' && textLines.length > 1) continue;
+                  if (i === textLines.length - 1 && lineText.trim() === '' && textLines.length > 1) continue;
+                  
+                  const newParagraph = lastParagraph.insertParagraph(lineText, Word.InsertLocation.after);
+                  context.load(newParagraph, ['style']);
+                  await context.sync();
+                  
+                  if (targetParagraph.style && targetParagraph.style !== 'Normal') {
+                    newParagraph.style = targetParagraph.style;
+                    await context.sync();
+                  }
+                  
+                  if (firstParagraph === null) {
+                    firstParagraph = newParagraph;
+                  }
+                  lastParagraph = newParagraph;
+                }
+                
+                if (firstParagraph) {
+                  insertedRange = firstParagraph.getRange().expandTo(lastParagraph.getRange());
+                } else {
+                  const textToInsert = text.startsWith(' ') || text.startsWith('\n') ? text : ' ' + text;
+                  insertedRange = range.insertText(textToInsert, Word.InsertLocation.after);
+                }
+              } else {
+                // No newlines - regular inline insertion
+                const textToInsert = text.startsWith(' ') || text.startsWith('\n') ? text : ' ' + text;
+                insertedRange = range.insertText(textToInsert, Word.InsertLocation.after);
+              }
             } else {
               // Regular text insertion (before found text, or beginning/end of article)
-              insertedRange = range.insertText(text, insertLocation);
+              // Handle newlines by splitting into paragraphs
+              if (text.includes('\n')) {
+                const textLines = text.split('\n');
+                let firstParagraph: Word.Paragraph | null = null;
+                let lastParagraph: Word.Paragraph = targetParagraph;
+                
+                // Determine initial insert location based on location parameter
+                const initialInsertLocation = 
+                  location === 'before' || location === 'end' 
+                    ? Word.InsertLocation.before 
+                    : Word.InsertLocation.after;
+                
+                for (let i = 0; i < textLines.length; i++) {
+                  const lineText = textLines[i];
+                  if (i === 0 && lineText.trim() === '' && textLines.length > 1) continue;
+                  if (i === textLines.length - 1 && lineText.trim() === '' && textLines.length > 1) continue;
+                  
+                  // First paragraph uses initial location, subsequent ones use 'after'
+                  const paragraphInsertLocation = i === 0 ? initialInsertLocation : Word.InsertLocation.after;
+                  const newParagraph = lastParagraph.insertParagraph(lineText, paragraphInsertLocation);
+                  context.load(newParagraph, ['style']);
+                  await context.sync();
+                  
+                  if (targetParagraph.style && targetParagraph.style !== 'Normal') {
+                    newParagraph.style = targetParagraph.style;
+                    await context.sync();
+                  }
+                  
+                  if (firstParagraph === null) {
+                    firstParagraph = newParagraph;
+                  }
+                  lastParagraph = newParagraph;
+                }
+                
+                if (firstParagraph) {
+                  insertedRange = firstParagraph.getRange().expandTo(lastParagraph.getRange());
+                } else {
+                  insertedRange = range.insertText(text, insertLocation);
+                }
+              } else {
+                insertedRange = range.insertText(text, insertLocation);
+              }
             }
 
             await context.sync();
@@ -961,13 +1070,15 @@ export async function executeArticleInstructionsHybrid(
 
 IMPORTANT: You can ONLY read and edit content within ARTICLE ${articleName}. All your tools are scoped to this article only.
 
+CRITICAL: PRESERVE FORMATTING - When extracting text from the user's instruction to insert, you MUST preserve all newlines (\\n), line breaks, and indentation exactly as provided. Do NOT normalize, trim, or modify the formatting of the text to insert. The text parameter should contain the exact formatting including newline characters.
+
 CURRENT ARTICLE CONTENT (for reference):
 ${articleContentPreview}
 
 AVAILABLE TOOLS:
 - readDocument: SEARCH tool - Search ARTICLE ${articleName} for a query and return contextual snippets around each match. MANDATORY: Call this FIRST before any insert/edit/delete. Returns matches with snippets showing context. Use the matchText from results as searchText. IMPORTANT: If you call readDocument with query "*" or "all", it will return the FULL article content. You MUST call this at the start to get the full article content and return it to the user.
 - editDocument: Find and replace text within ARTICLE ${articleName} only. Requires searchText from readDocument results.
-- insertText: Insert new text within ARTICLE ${articleName} only. MANDATORY: Requires searchText from readDocument results. If user says "before X", you MUST find X via readDocument first, then use that matchText as searchText with location: "before".
+- insertText: Insert new text within ARTICLE ${articleName} only. MANDATORY: Requires searchText from readDocument results. If user says "before X", you MUST find X via readDocument first, then use that matchText as searchText with location: "before". IMPORTANT: When extracting the text to insert from the user's instruction, preserve ALL newlines (\\n) and formatting exactly as provided. The text parameter must include newline characters where the user has line breaks.
 - deleteText: Delete text from ARTICLE ${articleName} only. Requires searchText from readDocument results.
 
 MANDATORY WORKFLOW - FOLLOW THIS EXACTLY:

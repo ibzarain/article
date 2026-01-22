@@ -86,23 +86,33 @@ const useStyles = makeStyles({
     color: "#cccccc",
     marginBottom: "8px",
     lineHeight: "1.5",
+    whiteSpace: "pre-wrap",
+    wordWrap: "break-word",
   },
   insertedText: {
     color: "#89d185",
     fontWeight: "500",
+    whiteSpace: "pre-wrap",
+    wordWrap: "break-word",
   },
   deletedText: {
     color: "#f48771",
     textDecoration: "line-through",
+    whiteSpace: "pre-wrap",
+    wordWrap: "break-word",
   },
   oldText: {
     color: "#f48771",
     textDecoration: "line-through",
     marginRight: "8px",
+    whiteSpace: "pre-wrap",
+    wordWrap: "break-word",
   },
   newText: {
     color: "#89d185",
     fontWeight: "500",
+    whiteSpace: "pre-wrap",
+    wordWrap: "break-word",
   },
   changeActions: {
     display: "flex",
