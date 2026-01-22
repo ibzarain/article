@@ -108,7 +108,6 @@ const useStyles = makeStyles({
     position: "relative",
     display: "flex",
     alignItems: "center",
-    gap: "6px",
   },
   textarea: {
     flex: 1,
@@ -121,6 +120,7 @@ const useStyles = makeStyles({
     border: "1px solid #30363d",
     borderRadius: "8px",
     padding: "8px 44px 8px 12px",
+    position: "relative",
     resize: "none",
     overflowY: "auto",
     lineHeight: "1.5",
@@ -186,8 +186,8 @@ const useStyles = makeStyles({
     },
   },
   bulkButton: {
-    padding: "6px 10px",
-    fontSize: "11px",
+    padding: "5px 9px",
+    fontSize: "10px",
     borderRadius: "6px",
     border: "none",
     backgroundColor: "#1f6feb",
@@ -196,7 +196,6 @@ const useStyles = makeStyles({
     fontWeight: "500",
     transition: "background 0.15s ease, transform 0.15s ease",
     whiteSpace: "nowrap",
-    flexShrink: 0,
     "&:hover:not(:disabled)": {
       backgroundColor: "#0969da",
       transform: "translateY(-1px)",
@@ -219,6 +218,14 @@ const useStyles = makeStyles({
     "&:active:not(:disabled)": {
       backgroundColor: "#b62324",
     } as any,
+  },
+  bulkButtonContainer: {
+    position: "absolute",
+    bottom: "6px",
+    left: "6px",
+    display: "flex",
+    gap: "6px",
+    zIndex: 10,
   },
   thinking: {
     display: "flex",
@@ -882,28 +889,6 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
 
         <div className={styles.inputContainer}>
           <div className={styles.inputRow}>
-            {pendingChangeCount > 0 && (
-              <>
-                <button
-                  className={styles.bulkButton}
-                  type="button"
-                  onClick={handleAcceptAll}
-                  disabled={bulkIsProcessing || isLoading}
-                  title="Accept all pending changes"
-                >
-                  Accept all ({pendingChangeCount})
-                </button>
-                <button
-                  className={`${styles.bulkButton} ${styles.bulkButtonReject}`}
-                  type="button"
-                  onClick={handleRejectAll}
-                  disabled={bulkIsProcessing || isLoading}
-                  title="Reject all pending changes"
-                >
-                  Reject all
-                </button>
-              </>
-            )}
             <textarea
               ref={textareaRef}
               className={styles.textarea}
@@ -924,7 +909,32 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
               data-gramm="false"
               data-gramm_editor="false"
               data-enable-grammarly="false"
+              style={{
+                paddingLeft: pendingChangeCount > 0 ? "140px" : "12px",
+              }}
             />
+            {pendingChangeCount > 0 && (
+              <div className={styles.bulkButtonContainer}>
+                <button
+                  className={styles.bulkButton}
+                  type="button"
+                  onClick={handleAcceptAll}
+                  disabled={bulkIsProcessing || isLoading}
+                  title="Accept all pending changes"
+                >
+                  Accept all ({pendingChangeCount})
+                </button>
+                <button
+                  className={`${styles.bulkButton} ${styles.bulkButtonReject}`}
+                  type="button"
+                  onClick={handleRejectAll}
+                  disabled={bulkIsProcessing || isLoading}
+                  title="Reject all pending changes"
+                >
+                  Reject all
+                </button>
+              </div>
+            )}
             <button
               disabled={!input.trim() || isLoading}
               onClick={handleSend}
