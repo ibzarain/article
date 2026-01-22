@@ -526,7 +526,9 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
 
   // Close mode dropdown when clicking outside
   useEffect(() => {
-    if (!showModeDropdown) return;
+    if (!showModeDropdown) {
+      return undefined;
+    }
 
     const handleClickOutside = (event: MouseEvent) => {
       if (modeDropdownRef.current && !modeDropdownRef.current.contains(event.target as Node)) {
