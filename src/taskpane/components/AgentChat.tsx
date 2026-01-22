@@ -159,9 +159,9 @@ const useStyles = makeStyles({
   },
   buttonRow: {
     position: "absolute",
-    bottom: "6px",
-    left: "6px",
-    right: "6px",
+    bottom: "2px",
+    left: "2px",
+    right: "2px",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
@@ -227,14 +227,7 @@ const useStyles = makeStyles({
     width: "100%",
     textAlign: "left",
     "&:hover": {
-      backgroundColor: "#21262d",
-    } as any,
-  },
-  modeSelectorOptionActive: {
-    backgroundColor: "#1f6feb",
-    color: "#ffffff",
-    "&:hover": {
-      backgroundColor: "#0969da",
+      backgroundColor: "#30363d",
     } as any,
   },
   sendButton: {
@@ -272,7 +265,7 @@ const useStyles = makeStyles({
     fontSize: "10px",
     borderRadius: "5px",
     border: "none",
-    backgroundColor: "rgba(34, 197, 94, 0.15)",
+    backgroundColor: "rgba(137, 209, 133, 0.15)",
     color: "#89d185",
     cursor: "pointer",
     fontWeight: "500",
@@ -283,10 +276,10 @@ const useStyles = makeStyles({
     alignItems: "center",
     pointerEvents: "auto",
     "&:hover:not(:disabled)": {
-      backgroundColor: "rgba(34, 197, 94, 0.25)",
+      backgroundColor: "rgba(137, 209, 133, 0.25)",
     } as any,
     "&:active:not(:disabled)": {
-      backgroundColor: "rgba(34, 197, 94, 0.35)",
+      backgroundColor: "rgba(137, 209, 133, 0.35)",
     } as any,
     "&:disabled": {
       opacity: 0.5,
@@ -531,7 +524,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
     scrollToBottom();
   }, [messages]);
 
-  // Close dropdown when clicking outside
+  // Close mode dropdown when clicking outside
   useEffect(() => {
     if (!showModeDropdown) return;
 
@@ -542,7 +535,9 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
     };
 
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
   }, [showModeDropdown]);
 
   // Auto-resize textarea
@@ -1010,49 +1005,47 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
               data-enable-grammarly="false"
             />
             <div className={styles.buttonRow}>
-              <div className={styles.buttonRowLeft}>
-                <div ref={modeDropdownRef} style={{ position: "relative" }}>
-                  <button
-                    className={styles.modeSelector}
-                    type="button"
-                    onClick={() => setShowModeDropdown(!showModeDropdown)}
-                    title="Select mode"
-                  >
-                    {mode === "edit" ? (
-                      <EditRegular style={{ fontSize: "12px" }} />
-                    ) : (
-                      <ChatRegular style={{ fontSize: "12px" }} />
-                    )}
-                    {mode === "edit" ? "Edit" : "Ask"}
-                    <ChevronDownRegular style={{ fontSize: "10px", marginLeft: "2px" }} />
-                  </button>
-                  {showModeDropdown && (
-                    <div className={styles.modeSelectorDropdown}>
-                      <button
-                        className={`${styles.modeSelectorOption} ${mode === "edit" ? styles.modeSelectorOptionActive : ""}`}
-                        type="button"
-                        onClick={() => {
-                          setMode("edit");
-                          setShowModeDropdown(false);
-                        }}
-                      >
-                        <EditRegular style={{ fontSize: "12px" }} />
-                        Edit
-                      </button>
-                      <button
-                        className={`${styles.modeSelectorOption} ${mode === "ask" ? styles.modeSelectorOptionActive : ""}`}
-                        type="button"
-                        onClick={() => {
-                          setMode("ask");
-                          setShowModeDropdown(false);
-                        }}
-                      >
-                        <ChatRegular style={{ fontSize: "12px" }} />
-                        Ask
-                      </button>
-                    </div>
+              <div className={styles.buttonRowLeft} ref={modeDropdownRef}>
+                <button
+                  className={styles.modeSelector}
+                  type="button"
+                  onClick={() => setShowModeDropdown(!showModeDropdown)}
+                  title={`${mode === "edit" ? "Edit" : "Ask"} mode`}
+                >
+                  {mode === "edit" ? (
+                    <EditRegular style={{ fontSize: "12px" }} />
+                  ) : (
+                    <ChatRegular style={{ fontSize: "12px" }} />
                   )}
-                </div>
+                  {mode === "edit" ? "Edit" : "Ask"}
+                  <ChevronDownRegular style={{ fontSize: "10px", marginLeft: "2px" }} />
+                </button>
+                {showModeDropdown && (
+                  <div className={styles.modeSelectorDropdown}>
+                    <button
+                      className={styles.modeSelectorOption}
+                      type="button"
+                      onClick={() => {
+                        setMode("edit");
+                        setShowModeDropdown(false);
+                      }}
+                    >
+                      <EditRegular style={{ fontSize: "12px" }} />
+                      Edit
+                    </button>
+                    <button
+                      className={styles.modeSelectorOption}
+                      type="button"
+                      onClick={() => {
+                        setMode("ask");
+                        setShowModeDropdown(false);
+                      }}
+                    >
+                      <ChatRegular style={{ fontSize: "12px" }} />
+                      Ask
+                    </button>
+                  </div>
+                )}
               </div>
               <div className={styles.buttonRowRight}>
                 {pendingChangeCount > 0 && (
