@@ -110,38 +110,27 @@ const useStyles = makeStyles({
   inputRow: {
     position: "relative",
     display: "flex",
-    alignItems: "stretch",
-  },
-  textareaWrapper: {
-    flex: 1,
-    position: "relative",
-    border: "1px solid #30363d",
-    borderRadius: "8px",
-    backgroundColor: "#0d1117",
-    minHeight: "40px",
-    maxHeight: "200px",
-    display: "flex",
-    flexDirection: "column",
-    overflow: "hidden",
-    "&:focus-within": {
-      borderColor: "#1f6feb",
-      boxShadow: "0 0 0 3px rgba(31, 111, 235, 0.1)",
-    } as any,
+    alignItems: "center",
   },
   textarea: {
     flex: 1,
-    width: "100%",
+    minHeight: "40px",
+    maxHeight: "200px",
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
     fontSize: "13px",
-    backgroundColor: "transparent",
+    backgroundColor: "#0d1117",
     color: "#c9d1d9",
-    border: "none",
-    borderRadius: "0",
+    border: "1px solid #30363d",
+    borderRadius: "8px",
     padding: "6px 12px",
-    margin: 0,
+    // Reserve a non-typable "toolbar lane" at the bottom
+    // NOTE: keep this >= toolbar height so caret/last lines never go under it
+    paddingBottom: "64px",
+    // Helps scroll positioning respect the toolbar lane
+    scrollPaddingBottom: "64px",
+    position: "relative",
     resize: "none",
     overflowY: "auto",
-    overflowX: "hidden",
     lineHeight: "1.5",
     whiteSpace: "pre-wrap",
     wordWrap: "break-word",
@@ -154,7 +143,7 @@ const useStyles = makeStyles({
       width: "8px",
     },
     "&::-webkit-scrollbar-track": {
-      background: "transparent",
+      background: "#0d1117",
     },
     "&::-webkit-scrollbar-thumb": {
       background: "#30363d",
@@ -165,25 +154,29 @@ const useStyles = makeStyles({
     },
     "&:focus": {
       outline: "none",
-    },
+      borderColor: "#1f6feb",
+      boxShadow: "0 0 0 3px rgba(31, 111, 235, 0.1)",
+    } as any,
     "&::placeholder": {
       color: "#6e7681",
     },
   },
   buttonRow: {
     position: "absolute",
-    bottom: "0",
-    left: "0",
-    right: "0",
+    bottom: "6px",
+    left: "6px",
+    right: "6px",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
+    // Fully opaque bar so text never shows behind buttons
     backgroundColor: "#0d1117",
-    borderTop: "1px solid #21262d",
-    padding: "4px 6px",
+    borderRadius: "6px",
+    padding: "2px 2px",
+    // Soft top fade so it feels “inside” without a hard divider
+    boxShadow: "0 -10px 16px rgba(13, 17, 23, 0.95)",
     pointerEvents: "none",
     zIndex: 10,
-    minHeight: "36px",
   },
   buttonRowLeft: {
     display: "flex",
@@ -198,31 +191,16 @@ const useStyles = makeStyles({
     pointerEvents: "auto",
   },
   modeSelectWrap: {
-    position: "relative",
-    pointerEvents: "auto",
-  },
-  modeSelectButton: {
     display: "flex",
     alignItems: "center",
     gap: "6px",
-    padding: "4px 8px",
+    padding: "0 4px",
     height: "24px",
     borderRadius: "6px",
     backgroundColor: "#21262d",
     border: "1px solid #30363d",
     color: "#c9d1d9",
-    cursor: "pointer",
-    fontSize: "10px",
-    fontWeight: "600",
-    transition: "all 0.15s ease",
-    whiteSpace: "nowrap",
-    "&:hover": {
-      backgroundColor: "#2d3238",
-      borderColor: "#3e3e42",
-    } as any,
-    "&:active": {
-      backgroundColor: "#1a1d21",
-    } as any,
+    pointerEvents: "auto",
   },
   modeSelectIcon: {
     display: "flex",
@@ -230,68 +208,25 @@ const useStyles = makeStyles({
     color: "#c9d1d9",
     opacity: 0.9,
   },
-  modeSelectText: {
+  modeSelect: {
+    appearance: "none",
+    backgroundColor: "transparent",
     color: "#c9d1d9",
-    userSelect: "none",
+    border: "none",
+    fontSize: "10px",
+    fontWeight: 600,
+    outline: "none",
+    cursor: "pointer",
+    paddingRight: "10px",
   },
   modeSelectChevron: {
     width: 0,
     height: 0,
     borderLeft: "4px solid transparent",
     borderRight: "4px solid transparent",
-    borderTop: "4px solid #8b949e",
-    opacity: 0.8,
-    transition: "transform 0.15s ease",
-  },
-  modeSelectChevronOpen: {
-    transform: "rotate(180deg)",
-    borderTop: "none",
-    borderBottom: "4px solid #8b949e",
-  },
-  modeSelectDropdown: {
-    position: "absolute",
-    bottom: "100%",
-    left: "0",
-    marginBottom: "4px",
-    backgroundColor: "#1e1e1e",
-    border: "1px solid #3e3e42",
-    borderRadius: "6px",
-    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)",
-    overflow: "hidden",
-    zIndex: 1000,
-    minWidth: "100%",
-  },
-  modeSelectOption: {
-    display: "flex",
-    alignItems: "center",
-    gap: "6px",
-    padding: "6px 10px",
-    fontSize: "11px",
-    color: "#c9d1d9",
-    cursor: "pointer",
-    backgroundColor: "transparent",
-    border: "none",
-    width: "100%",
-    textAlign: "left",
-    transition: "background 0.1s ease",
-    "&:hover": {
-      backgroundColor: "#2d2d30",
-    } as any,
-    "&:first-child": {
-      borderTopLeftRadius: "6px",
-      borderTopRightRadius: "6px",
-    } as any,
-    "&:last-child": {
-      borderBottomLeftRadius: "6px",
-      borderBottomRightRadius: "6px",
-    } as any,
-  },
-  modeSelectOptionActive: {
-    backgroundColor: "#1f6feb",
-    color: "#ffffff",
-    "&:hover": {
-      backgroundColor: "#0969da",
-    } as any,
+    borderTop: "5px solid #8b949e",
+    opacity: 0.9,
+    marginLeft: "-6px",
   },
   modeSelector: {
     padding: "4px 8px",
@@ -581,8 +516,6 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<"edit" | "ask">("edit");
-  const [modeDropdownOpen, setModeDropdownOpen] = useState<boolean>(false);
-  const modeDropdownRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [changeTracker] = useState<ChangeTracking>(() => createChangeTracker());
@@ -613,26 +546,6 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    if (!modeDropdownOpen) {
-      return () => {
-        // No-op cleanup when dropdown is closed
-      };
-    }
-
-    const handleClickOutside = (event: MouseEvent) => {
-      if (modeDropdownRef.current && !modeDropdownRef.current.contains(event.target as Node)) {
-        setModeDropdownOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [modeDropdownOpen]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -1060,7 +973,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                   </div>
                 )}
               </div>
-              );
+            );
             })
           )}
           {isLoading && (
@@ -1086,70 +999,44 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
 
         <div className={styles.inputContainer}>
           <div className={styles.inputRow}>
-            <div className={styles.textareaWrapper}>
-              <textarea
-                ref={textareaRef}
-                className={styles.textarea}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onPaste={handlePaste}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend();
-                  }
-                }}
-                placeholder={mode === "edit" ? "Ask me to edit your document..." : "Ask me a question..."}
-                disabled={isLoading}
-                rows={1}
-                spellCheck={false}
-                autoComplete="off"
-                data-gramm="false"
-                data-gramm_editor="false"
-                data-enable-grammarly="false"
-              />
-              <div className={styles.buttonRow}>
+            <textarea
+              ref={textareaRef}
+              className={styles.textarea}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onPaste={handlePaste}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              placeholder={mode === "edit" ? "Ask me to edit your document..." : "Ask me a question..."}
+              disabled={isLoading}
+              rows={1}
+              spellCheck={false}
+              autoComplete="off"
+              data-gramm="false"
+              data-gramm_editor="false"
+              data-enable-grammarly="false"
+            />
+            <div className={styles.buttonRow}>
               <div className={styles.buttonRowLeft}>
-                <div className={styles.modeSelectWrap} ref={modeDropdownRef}>
-                  <button
-                    className={styles.modeSelectButton}
-                    type="button"
-                    onClick={() => setModeDropdownOpen(!modeDropdownOpen)}
+                <div className={styles.modeSelectWrap} title="Mode">
+                  <span className={styles.modeSelectIcon}>
+                    {mode === "edit" ? <EditRegular style={{ fontSize: "12px" }} /> : <ChatRegular style={{ fontSize: "12px" }} />}
+                  </span>
+                  <select
+                    className={styles.modeSelect}
+                    value={mode}
+                    onChange={(e) => setMode(e.target.value as "edit" | "ask")}
                     disabled={isLoading}
-                    title="Mode"
+                    aria-label="Mode"
                   >
-                    <span className={styles.modeSelectIcon}>
-                      {mode === "edit" ? <EditRegular style={{ fontSize: "12px" }} /> : <ChatRegular style={{ fontSize: "12px" }} />}
-                    </span>
-                    <span className={styles.modeSelectText}>{mode === "edit" ? "Edit" : "Ask"}</span>
-                    <span className={`${styles.modeSelectChevron} ${modeDropdownOpen ? styles.modeSelectChevronOpen : ""}`} />
-                  </button>
-                  {modeDropdownOpen && (
-                    <div className={styles.modeSelectDropdown}>
-                      <button
-                        className={`${styles.modeSelectOption} ${mode === "edit" ? styles.modeSelectOptionActive : ""}`}
-                        type="button"
-                        onClick={() => {
-                          setMode("edit");
-                          setModeDropdownOpen(false);
-                        }}
-                      >
-                        <EditRegular style={{ fontSize: "12px" }} />
-                        <span>Edit</span>
-                      </button>
-                      <button
-                        className={`${styles.modeSelectOption} ${mode === "ask" ? styles.modeSelectOptionActive : ""}`}
-                        type="button"
-                        onClick={() => {
-                          setMode("ask");
-                          setModeDropdownOpen(false);
-                        }}
-                      >
-                        <ChatRegular style={{ fontSize: "12px" }} />
-                        <span>Ask</span>
-                      </button>
-                    </div>
-                  )}
+                    <option value="edit">Edit</option>
+                    <option value="ask">Ask</option>
+                  </select>
+                  <span className={styles.modeSelectChevron} />
                 </div>
               </div>
               <div className={styles.buttonRowRight}>
@@ -1189,7 +1076,6 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                   )}
                 </button>
               </div>
-            </div>
             </div>
           </div>
         </div>
