@@ -314,7 +314,13 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
               
               // Search only within article range
               // Try multiple search strategies to find the text
-              let searchResults = articleRange.search(searchText, {
+              // Normalize search text: remove extra whitespace, handle line breaks
+              const normalizeSearchText = (text: string): string => {
+                return text.replace(/\s+/g, ' ').trim();
+              };
+              
+              const normalizedSearch = normalizeSearchText(searchText);
+              let searchResults = articleRange.search(normalizedSearch, {
                 matchCase: false,
                 matchWholeWord: false,
               });
@@ -322,12 +328,23 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
               context.load(searchResults, 'items');
               await context.sync();
               
-              const searchAttempts: string[] = [searchText];
+              const searchAttempts: string[] = [normalizedSearch];
+              
+              // If not found, try original (might have different whitespace)
+              if (searchResults.items.length === 0 && searchText !== normalizedSearch) {
+                searchAttempts.push(searchText);
+                searchResults = articleRange.search(searchText, {
+                  matchCase: false,
+                  matchWholeWord: false,
+                });
+                context.load(searchResults, 'items');
+                await context.sync();
+              }
               
               // If not found, try with different whitespace handling
               if (searchResults.items.length === 0) {
-                const trimmedSearch = searchText.trim();
-                if (trimmedSearch !== searchText) {
+                const trimmedSearch = normalizedSearch.trim();
+                if (trimmedSearch !== normalizedSearch) {
                   searchAttempts.push(trimmedSearch);
                   searchResults = articleRange.search(trimmedSearch, {
                     matchCase: false,
@@ -339,9 +356,9 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
               }
               
               // Try without punctuation at the end
-              if (searchResults.items.length === 0 && searchText && /[.:;]/.test(searchText)) {
-                const withoutPunct = searchText.replace(/[.:;]+$/, '').trim();
-                if (withoutPunct && withoutPunct !== searchText && !searchAttempts.includes(withoutPunct)) {
+              if (searchResults.items.length === 0 && normalizedSearch && /[.:;]/.test(normalizedSearch)) {
+                const withoutPunct = normalizedSearch.replace(/[.:;]+$/, '').trim();
+                if (withoutPunct && withoutPunct !== normalizedSearch && !searchAttempts.includes(withoutPunct)) {
                   searchAttempts.push(withoutPunct);
                   searchResults = articleRange.search(withoutPunct, {
                     matchCase: false,
@@ -353,8 +370,8 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
               }
               
               // Try with punctuation added if original didn't have it
-              if (searchResults.items.length === 0 && searchText && !/[.:;]$/.test(searchText)) {
-                const withPunct = searchText + ':';
+              if (searchResults.items.length === 0 && normalizedSearch && !/[.:;]$/.test(normalizedSearch)) {
+                const withPunct = normalizedSearch + ':';
                 if (!searchAttempts.includes(withPunct)) {
                   searchAttempts.push(withPunct);
                   searchResults = articleRange.search(withPunct, {
@@ -367,8 +384,8 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
               }
               
               // Try partial match - just the key words if it's a phrase
-              if (searchResults.items.length === 0 && searchText) {
-                const words = searchText.trim().split(/\s+/);
+              if (searchResults.items.length === 0 && normalizedSearch) {
+                const words = normalizedSearch.trim().split(/\s+/);
                 if (words.length > 2) {
                   // Try last 2-3 words (e.g., "Construction Manager shall" from "The Construction Manager shall:")
                   const partialSearch = words.slice(-3).join(' ');
@@ -380,6 +397,104 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                     });
                     context.load(searchResults, 'items');
                     await context.sync();
+                  }
+                }
+                // Also try first few words if it's a longer phrase
+                if (searchResults.items.length === 0 && words.length > 3) {
+                  const firstWords = words.slice(0, 3).join(' ');
+                  if (firstWords && !searchAttempts.includes(firstWords)) {
+                    searchAttempts.push(firstWords);
+                    searchResults = articleRange.search(firstWords, {
+                      matchCase: false,
+                      matchWholeWord: false,
+                    });
+                    context.load(searchResults, 'items');
+                    await context.sync();
+                  }
+                }
+              }
+              
+              // Fallback: search paragraph by paragraph if range search fails
+              if (searchResults.items.length === 0) {
+                // Get all paragraphs in the article
+                const articleParagraphs: Word.Paragraph[] = [];
+                for (let i = articleBoundaries.startParagraphIndex; i <= articleBoundaries.endParagraphIndex; i++) {
+                  articleParagraphs.push(paragraphs.items[i]);
+                }
+                
+                // Load all paragraph texts first
+                for (const para of articleParagraphs) {
+                  context.load(para, 'text');
+                }
+                await context.sync();
+                
+                // Search each paragraph individually using Word's search API
+                for (const para of articleParagraphs) {
+                  const paraRange = para.getRange('Whole');
+                  
+                  // Try normalized search first
+                  let paraSearchResults = paraRange.search(normalizedSearch, {
+                    matchCase: false,
+                    matchWholeWord: false,
+                  });
+                  context.load(paraSearchResults, 'items');
+                  await context.sync();
+                  
+                  // If not found, try original search text
+                  if (paraSearchResults.items.length === 0 && searchText !== normalizedSearch) {
+                    paraSearchResults = paraRange.search(searchText, {
+                      matchCase: false,
+                      matchWholeWord: false,
+                    });
+                    context.load(paraSearchResults, 'items');
+                    await context.sync();
+                  }
+                  
+                  // If still not found, try searching in the paragraph text directly
+                  if (paraSearchResults.items.length === 0) {
+                    const paraText = para.text || '';
+                    const searchLower = normalizedSearch.toLowerCase();
+                    const paraTextLower = paraText.toLowerCase();
+                    
+                    if (paraTextLower.includes(searchLower)) {
+                      // Found in text, now try to get the range using a substring search
+                      // Try to find a unique substring that includes our search text
+                      const searchIndex = paraTextLower.indexOf(searchLower);
+                      if (searchIndex >= 0) {
+                        // Get a range that includes the found text
+                        // Use a slightly longer search string that includes context
+                        const startPos = Math.max(0, searchIndex - 5);
+                        const endPos = Math.min(paraText.length, searchIndex + normalizedSearch.length + 5);
+                        const contextSearch = paraText.substring(startPos, endPos);
+                        
+                        // Try searching for this context string
+                        paraSearchResults = paraRange.search(contextSearch, {
+                          matchCase: false,
+                          matchWholeWord: false,
+                        });
+                        context.load(paraSearchResults, 'items');
+                        await context.sync();
+                        
+                        // If that doesn't work, try just the core words
+                        if (paraSearchResults.items.length === 0) {
+                          const words = normalizedSearch.split(/\s+/).filter(w => w.length > 2);
+                          if (words.length > 0) {
+                            const coreSearch = words.join(' ');
+                            paraSearchResults = paraRange.search(coreSearch, {
+                              matchCase: false,
+                              matchWholeWord: false,
+                            });
+                            context.load(paraSearchResults, 'items');
+                            await context.sync();
+                          }
+                        }
+                      }
+                    }
+                  }
+                  
+                  if (paraSearchResults.items.length > 0) {
+                    searchResults = paraSearchResults;
+                    break;
                   }
                 }
               }

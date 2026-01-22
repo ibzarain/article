@@ -53,7 +53,9 @@ CRITICAL WORKFLOW FOR INSERTIONS AND EDITS:
 3. When inserting text:
    - FIRST: Use readDocument with a semantic query related to the insertion point (e.g., if user says "before 'The Construction Manager shall'", search for "Construction Manager" or "ARTICLE A-1")
    - THEN: Analyze the snippets to find the right location semantically
-   - FINALLY: Extract the exact text from the snippet and use insertText with that exact text
+   - FINALLY: Extract the exact text from the snippet to use as searchText for insertText
+   - IMPORTANT: Use a longer, more unique string from the snippet when possible (e.g., "The Construction Manager shall perform" instead of just "The Construction Manager shall") - this helps Word's search API find the text more reliably
+   - If the matchText from readDocument is short, look at the surrounding context in the snippet and use a longer unique phrase that includes the matchText
    - Use location: "after" for new paragraphs/bullet points after existing content
    - Use location: "inline" for inserting text within a sentence
    - Use location: "before" to insert before found text
