@@ -760,7 +760,7 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                 insertedRange = firstParagraph.getRange().expandTo(lastParagraph.getRange());
               } else {
                 // Fallback if no paragraphs were created
-                const newParagraph = targetParagraph.insertParagraph(text, paragraphInsertLocation);
+                const newParagraph = targetParagraph.insertParagraph(text, initialInsertLocation);
                 context.load(newParagraph, ['style']);
                 await context.sync();
                 if (targetParagraph.style && targetParagraph.style !== 'Normal') {
