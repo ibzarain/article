@@ -172,7 +172,7 @@ export async function generateAgentResponse(agent: any, prompt: string) {
         // Fallback
         parameters = { type: 'object', properties: {}, required: [] };
       }
-      
+
       return {
         type: 'function' as const,
         function: {
@@ -231,11 +231,11 @@ export async function generateAgentResponse(agent: any, prompt: string) {
       // Execute all tool calls
       console.log(`Executing ${message.tool_calls.length} tool call(s)...`);
       const toolResults = [];
-      
+
       for (const toolCall of message.tool_calls) {
         const toolName = toolCall.function.name;
         const tool = agent.tools[toolName];
-        
+
         if (!tool) {
           console.warn(`Tool ${toolName} not found`);
           toolResults.push({
@@ -252,12 +252,12 @@ export async function generateAgentResponse(agent: any, prompt: string) {
           const args = JSON.parse(toolCall.function.arguments);
           const result = await tool.execute(args);
           console.log(`Tool ${toolName} result:`, result);
-          
+
           // Format result as string for OpenAI
-          const resultContent = typeof result === 'string' 
-            ? result 
+          const resultContent = typeof result === 'string'
+            ? result
             : JSON.stringify(result);
-            
+
           toolResults.push({
             tool_call_id: toolCall.id,
             role: 'tool' as const,
@@ -270,7 +270,7 @@ export async function generateAgentResponse(agent: any, prompt: string) {
             tool_call_id: toolCall.id,
             role: 'tool' as const,
             name: toolName,
-            content: JSON.stringify({ 
+            content: JSON.stringify({
               error: error instanceof Error ? error.message : 'Tool execution failed',
               details: error instanceof Error ? error.stack : String(error)
             }),
