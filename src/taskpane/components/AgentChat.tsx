@@ -5,7 +5,7 @@ import {
   makeStyles,
   Spinner,
 } from "@fluentui/react-components";
-import { SendRegular, SparkleFilled } from "@fluentui/react-icons";
+import { SendRegular, SparkleFilled, CheckmarkCircleFilled, DismissCircleFilled } from "@fluentui/react-icons";
 import { generateAgentResponse } from "../agent/wordAgent";
 import { createChangeTracker } from "../utils/changeTracker";
 import { DocumentChange, ChangeTracking } from "../types/changes";
@@ -13,7 +13,6 @@ import { setChangeTracker } from "../tools/wordEditWithTracking";
 import { setArticleChangeTracker } from "../tools/articleEditTools";
 import { setFastArticleChangeTracker } from "../tools/fastArticleEdit";
 import { setHybridArticleChangeTracker, executeArticleInstructionsHybrid } from "../tools/hybridArticleEdit";
-import PendingChanges from "./PendingChanges";
 
 interface AgentChatProps {
   agent: ReturnType<typeof import("../agent/wordAgent").createWordAgent>;
@@ -22,6 +21,8 @@ interface AgentChatProps {
 interface Message {
   role: "user" | "assistant";
   content: string;
+  changes?: DocumentChange[];
+  messageId?: string;
 }
 
 const useStyles = makeStyles({
@@ -196,6 +197,127 @@ const useStyles = makeStyles({
     lineHeight: "1.7",
     maxWidth: "400px",
   },
+  changeBlock: {
+    marginTop: "12px",
+    border: "1px solid #30363d",
+    borderRadius: "8px",
+    overflow: "hidden",
+    backgroundColor: "#161b22",
+  },
+  changeHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "8px 12px",
+    backgroundColor: "#1c2128",
+    borderBottom: "1px solid #30363d",
+    fontSize: "12px",
+  },
+  changeType: {
+    fontSize: "11px",
+    fontWeight: "600",
+    textTransform: "uppercase",
+    padding: "2px 6px",
+    borderRadius: "4px",
+    letterSpacing: "0.5px",
+  },
+  editType: {
+    backgroundColor: "#264f78",
+    color: "#75beff",
+  },
+  insertType: {
+    backgroundColor: "#1e4620",
+    color: "#89d185",
+  },
+  deleteType: {
+    backgroundColor: "#5a1d1d",
+    color: "#f48771",
+  },
+  formatType: {
+    backgroundColor: "#4a148c",
+    color: "#c586c0",
+  },
+  changeActions: {
+    display: "flex",
+    gap: "6px",
+  },
+  changeActionButton: {
+    padding: "4px 8px",
+    fontSize: "11px",
+    borderRadius: "4px",
+    border: "none",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    gap: "4px",
+    transition: "all 0.15s ease",
+    fontWeight: "500",
+  },
+  acceptButton: {
+    backgroundColor: "#1e4620",
+    color: "#89d185",
+    "&:hover:not(:disabled)": {
+      backgroundColor: "#2d5a2f",
+    },
+    "&:disabled": {
+      opacity: 0.5,
+      cursor: "not-allowed",
+    },
+  },
+  rejectButton: {
+    backgroundColor: "#5a1d1d",
+    color: "#f48771",
+    "&:hover:not(:disabled)": {
+      backgroundColor: "#6a2d2d",
+    },
+    "&:disabled": {
+      opacity: 0.5,
+      cursor: "not-allowed",
+    },
+  },
+  changeContent: {
+    padding: "12px",
+    fontFamily: "'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace",
+    fontSize: "12px",
+    lineHeight: "1.6",
+  },
+  diffLine: {
+    padding: "4px 8px",
+    borderRadius: "4px",
+    marginBottom: "4px",
+    display: "block",
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
+  },
+  diffOld: {
+    backgroundColor: "#5a1d1d",
+    color: "#f48771",
+    textDecoration: "line-through",
+  },
+  diffNew: {
+    backgroundColor: "#1e4620",
+    color: "#89d185",
+  },
+  diffInsert: {
+    backgroundColor: "#1e4620",
+    color: "#89d185",
+  },
+  diffDelete: {
+    backgroundColor: "#5a1d1d",
+    color: "#f48771",
+    textDecoration: "line-through",
+  },
+  changeDescription: {
+    fontSize: "12px",
+    color: "#8b949e",
+    marginTop: "4px",
+  },
+  changesContainer: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+    marginTop: "12px",
+  },
 });
 
 const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
@@ -207,6 +329,8 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [changeTracker] = useState<ChangeTracking>(() => createChangeTracker());
   const currentMessageChangesRef = useRef<DocumentChange[]>([]);
+  const [processingChanges, setProcessingChanges] = useState<Set<string>>(new Set());
+  const messageIdCounter = useRef<number>(0);
   const styles = useStyles();
 
   // Set up change tracking callback for the tools
@@ -284,7 +408,8 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
     currentMessageChangesRef.current = [];
 
     // Add user message
-    const newMessages: Message[] = [...messages, { role: "user", content: userMessage }];
+    const userMessageId = `msg-${messageIdCounter.current++}`;
+    const newMessages: Message[] = [...messages, { role: "user", content: userMessage, messageId: userMessageId }];
     setMessages(newMessages);
 
     try {
@@ -305,12 +430,18 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
         response = await generateAgentResponse(agent, userMessage);
       }
 
-      // Add assistant response (changes are now shown inline in document)
+      // Get changes for this message
+      const messageChanges = [...currentMessageChangesRef.current];
+      const assistantMessageId = `msg-${messageIdCounter.current++}`;
+
+      // Add assistant response with associated changes
       setMessages([
         ...newMessages,
         {
           role: "assistant",
           content: response,
+          changes: messageChanges.length > 0 ? messageChanges : undefined,
+          messageId: assistantMessageId,
         },
       ]);
 
@@ -319,17 +450,103 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "An error occurred";
       setError(errorMessage);
+      const errorMessageId = `msg-${messageIdCounter.current++}`;
       setMessages([
         ...newMessages,
         {
           role: "assistant",
           content: `Error: ${errorMessage}`,
+          messageId: errorMessageId,
         },
       ]);
       currentMessageChangesRef.current = [];
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleAcceptChange = async (changeId: string, messageId?: string) => {
+    setProcessingChanges(prev => new Set(prev).add(changeId));
+    try {
+      await changeTracker.acceptChange(changeId);
+      // Update the message to remove the accepted change
+      if (messageId) {
+        setMessages(prev => prev.map(msg => 
+          msg.messageId === messageId && msg.changes
+            ? { ...msg, changes: msg.changes.filter(c => c.id !== changeId) }
+            : msg
+        ));
+      }
+    } catch (error) {
+      console.error("Error accepting change:", error);
+    } finally {
+      setProcessingChanges(prev => {
+        const next = new Set(prev);
+        next.delete(changeId);
+        return next;
+      });
+    }
+  };
+
+  const handleRejectChange = async (changeId: string, messageId?: string) => {
+    setProcessingChanges(prev => new Set(prev).add(changeId));
+    try {
+      await changeTracker.rejectChange(changeId);
+      // Update the message to remove the rejected change
+      if (messageId) {
+        setMessages(prev => prev.map(msg => 
+          msg.messageId === messageId && msg.changes
+            ? { ...msg, changes: msg.changes.filter(c => c.id !== changeId) }
+            : msg
+        ));
+      }
+    } catch (error) {
+      console.error("Error rejecting change:", error);
+    } finally {
+      setProcessingChanges(prev => {
+        const next = new Set(prev);
+        next.delete(changeId);
+        return next;
+      });
+    }
+  };
+
+  const getTypeClass = (type: DocumentChange["type"]) => {
+    switch (type) {
+      case "edit":
+        return styles.editType;
+      case "insert":
+        return styles.insertType;
+      case "delete":
+        return styles.deleteType;
+      case "format":
+        return styles.formatType;
+      default:
+        return "";
+    }
+  };
+
+  const formatChangeDescription = (change: DocumentChange): string => {
+    if (change.type === "format" && change.formatChanges) {
+      const formatParts: string[] = [];
+      if (change.formatChanges.bold !== undefined) {
+        formatParts.push(change.formatChanges.bold ? "bold" : "not bold");
+      }
+      if (change.formatChanges.italic !== undefined) {
+        formatParts.push(change.formatChanges.italic ? "italic" : "not italic");
+      }
+      if (change.formatChanges.underline !== undefined) {
+        formatParts.push(change.formatChanges.underline ? "underlined" : "not underlined");
+      }
+      if (change.formatChanges.fontSize !== undefined) {
+        formatParts.push(`font size ${change.formatChanges.fontSize}pt`);
+      }
+      if (change.formatChanges.fontColor !== undefined) {
+        formatParts.push(`color ${change.formatChanges.fontColor}`);
+      }
+      return formatParts.join(", ");
+    }
+    return change.description;
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -362,7 +579,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
           ) : (
             messages.map((message, index) => (
               <div
-                key={index}
+                key={message.messageId || index}
                 className={`${styles.message} ${message.role === "user" ? styles.userMessage : styles.assistantMessage
                   }`}
               >
@@ -373,6 +590,92 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                 >
                   {message.content}
                 </div>
+                
+                {/* Show changes inline for assistant messages */}
+                {message.role === "assistant" && message.changes && message.changes.length > 0 && (
+                  <div className={styles.changesContainer}>
+                    {message.changes.map((change) => {
+                      const isProcessing = processingChanges.has(change.id);
+                      return (
+                        <div key={change.id} className={styles.changeBlock}>
+                          <div className={styles.changeHeader}>
+                            <div>
+                              <span className={`${styles.changeType} ${getTypeClass(change.type)}`}>
+                                {change.type}
+                              </span>
+                              <div className={styles.changeDescription}>
+                                {formatChangeDescription(change)}
+                              </div>
+                            </div>
+                            <div className={styles.changeActions}>
+                              <button
+                                className={`${styles.changeActionButton} ${styles.acceptButton}`}
+                                onClick={() => handleAcceptChange(change.id, message.messageId)}
+                                disabled={isProcessing}
+                                title="Accept change"
+                              >
+                                {isProcessing ? (
+                                  <Spinner size="tiny" />
+                                ) : (
+                                  <>
+                                    <CheckmarkCircleFilled style={{ fontSize: "12px" }} />
+                                    Accept
+                                  </>
+                                )}
+                              </button>
+                              <button
+                                className={`${styles.changeActionButton} ${styles.rejectButton}`}
+                                onClick={() => handleRejectChange(change.id, message.messageId)}
+                                disabled={isProcessing}
+                                title="Reject change"
+                              >
+                                {isProcessing ? (
+                                  <Spinner size="tiny" />
+                                ) : (
+                                  <>
+                                    <DismissCircleFilled style={{ fontSize: "12px" }} />
+                                    Reject
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                          <div className={styles.changeContent}>
+                            {change.type === "edit" && (
+                              <>
+                                {change.oldText && (
+                                  <div className={`${styles.diffLine} ${styles.diffOld}`}>
+                                    <span style={{ opacity: 0.7 }}>−</span> {change.oldText}
+                                  </div>
+                                )}
+                                {change.newText && (
+                                  <div className={`${styles.diffLine} ${styles.diffNew}`}>
+                                    <span style={{ opacity: 0.7 }}>+</span> {change.newText}
+                                  </div>
+                                )}
+                              </>
+                            )}
+                            {change.type === "insert" && change.newText && (
+                              <div className={`${styles.diffLine} ${styles.diffInsert}`}>
+                                <span style={{ opacity: 0.7 }}>+</span> {change.newText}
+                              </div>
+                            )}
+                            {change.type === "delete" && change.oldText && (
+                              <div className={`${styles.diffLine} ${styles.diffDelete}`}>
+                                <span style={{ opacity: 0.7 }}>−</span> {change.oldText}
+                              </div>
+                            )}
+                            {change.type === "format" && (
+                              <div className={styles.changeDescription}>
+                                Applied formatting to: "{change.searchText || 'selected text'}"
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             ))
           )}
@@ -436,9 +739,6 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
           </div>
         </div>
       </div>
-
-      {/* Pending Changes Panel */}
-      <PendingChanges changeTracker={changeTracker} />
     </div>
   );
 };
