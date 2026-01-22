@@ -169,9 +169,21 @@ function createScopedReadDocumentTool(articleBoundaries: ArticleBoundaries) {
             matches,
             totalFound,
             articleLength: text.length,
-            fullContent: (result as any).fullContent, // Preserve full content if present
+            fullContent: undefined as string | undefined, // No full content for search queries
           };
-        });
+        }) as {
+          matches: Array<{
+            matchText: string;
+            snippet: string;
+            matchStart: number;
+            matchEnd: number;
+            snippetStart: number;
+            snippetEnd: number;
+          }>;
+          totalFound: number;
+          articleLength: number;
+          fullContent?: string;
+        };
         
         // Log the result
         if (query === '*' || query.toLowerCase() === 'all') {
