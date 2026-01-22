@@ -721,22 +721,22 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
             if (insertAsNewParagraph && targetParagraph) {
               // Insert as new paragraph(s) - split by newlines to preserve formatting
               // Determine the correct InsertLocation based on the location parameter
-              const initialInsertLocation = 
-                location === 'before' || location === 'end' 
-                  ? Word.InsertLocation.before 
+              const initialInsertLocation =
+                location === 'before' || location === 'end'
+                  ? Word.InsertLocation.before
                   : Word.InsertLocation.after;
-              
+
               // Split text by newlines to create multiple paragraphs if needed
               const textLines = text.split('\n');
               let firstParagraph: Word.Paragraph | null = null;
               let lastParagraph: Word.Paragraph = targetParagraph;
-              
+
               for (let i = 0; i < textLines.length; i++) {
                 const lineText = textLines[i];
                 // Skip empty lines at the start/end but preserve them in the middle
                 if (i === 0 && lineText.trim() === '' && textLines.length > 1) continue;
                 if (i === textLines.length - 1 && lineText.trim() === '' && textLines.length > 1) continue;
-                
+
                 // First paragraph uses initial location, subsequent ones always use 'after' to maintain order
                 const paragraphInsertLocation = i === 0 ? initialInsertLocation : Word.InsertLocation.after;
                 const newParagraph = lastParagraph.insertParagraph(lineText, paragraphInsertLocation);
@@ -748,13 +748,13 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                   newParagraph.style = targetParagraph.style;
                   await context.sync();
                 }
-                
+
                 if (firstParagraph === null) {
                   firstParagraph = newParagraph;
                 }
                 lastParagraph = newParagraph;
               }
-              
+
               // Use the range of all inserted paragraphs
               if (firstParagraph) {
                 insertedRange = firstParagraph.getRange().expandTo(lastParagraph.getRange());
@@ -782,27 +782,27 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                 const textLines = text.split('\n');
                 let firstParagraph: Word.Paragraph | null = null;
                 let lastParagraph: Word.Paragraph = targetParagraph;
-                
+
                 for (let i = 0; i < textLines.length; i++) {
                   const lineText = textLines[i];
                   if (i === 0 && lineText.trim() === '' && textLines.length > 1) continue;
                   if (i === textLines.length - 1 && lineText.trim() === '' && textLines.length > 1) continue;
-                  
+
                   const newParagraph = lastParagraph.insertParagraph(lineText, Word.InsertLocation.after);
                   context.load(newParagraph, ['style']);
                   await context.sync();
-                  
+
                   if (targetParagraph.style && targetParagraph.style !== 'Normal') {
                     newParagraph.style = targetParagraph.style;
                     await context.sync();
                   }
-                  
+
                   if (firstParagraph === null) {
                     firstParagraph = newParagraph;
                   }
                   lastParagraph = newParagraph;
                 }
-                
+
                 if (firstParagraph) {
                   insertedRange = firstParagraph.getRange().expandTo(lastParagraph.getRange());
                 } else {
@@ -821,35 +821,35 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                 const textLines = text.split('\n');
                 let firstParagraph: Word.Paragraph | null = null;
                 let lastParagraph: Word.Paragraph = targetParagraph;
-                
+
                 // Determine initial insert location based on location parameter
-                const initialInsertLocation = 
-                  location === 'before' || location === 'end' 
-                    ? Word.InsertLocation.before 
+                const initialInsertLocation =
+                  location === 'before' || location === 'end'
+                    ? Word.InsertLocation.before
                     : Word.InsertLocation.after;
-                
+
                 for (let i = 0; i < textLines.length; i++) {
                   const lineText = textLines[i];
                   if (i === 0 && lineText.trim() === '' && textLines.length > 1) continue;
                   if (i === textLines.length - 1 && lineText.trim() === '' && textLines.length > 1) continue;
-                  
+
                   // First paragraph uses initial location, subsequent ones use 'after'
                   const paragraphInsertLocation = i === 0 ? initialInsertLocation : Word.InsertLocation.after;
                   const newParagraph = lastParagraph.insertParagraph(lineText, paragraphInsertLocation);
                   context.load(newParagraph, ['style']);
                   await context.sync();
-                  
+
                   if (targetParagraph.style && targetParagraph.style !== 'Normal') {
                     newParagraph.style = targetParagraph.style;
                     await context.sync();
                   }
-                  
+
                   if (firstParagraph === null) {
                     firstParagraph = newParagraph;
                   }
                   lastParagraph = newParagraph;
                 }
-                
+
                 if (firstParagraph) {
                   insertedRange = firstParagraph.getRange().expandTo(lastParagraph.getRange());
                 } else {

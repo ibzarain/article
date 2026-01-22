@@ -47,7 +47,7 @@ const useStyles = makeStyles({
     flex: 1,
     display: "flex",
     flexDirection: "column",
-    gap: "20px",
+    gap: "12px",
     overflowY: "auto",
     overflowX: "hidden",
     padding: "20px 24px",
@@ -70,7 +70,7 @@ const useStyles = makeStyles({
   message: {
     display: "flex",
     flexDirection: "column",
-    gap: "6px",
+    gap: "4px",
     maxWidth: "85%",
   },
   userMessage: {
@@ -99,7 +99,7 @@ const useStyles = makeStyles({
     borderBottomLeftRadius: "4px",
   },
   inputContainer: {
-    padding: "16px 20px",
+    padding: "8px 12px",
     borderTop: "1px solid #21262d",
     backgroundColor: "#0d1117",
     flexShrink: 0,
@@ -118,8 +118,8 @@ const useStyles = makeStyles({
     backgroundColor: "#0d1117",
     color: "#c9d1d9",
     border: "1px solid #30363d",
-    borderRadius: "12px",
-    padding: "10px 50px 10px 16px",
+    borderRadius: "8px",
+    padding: "8px 44px 8px 12px",
     resize: "none",
     overflowY: "auto",
     lineHeight: "1.5",
@@ -154,8 +154,8 @@ const useStyles = makeStyles({
   },
   sendButton: {
     position: "absolute",
-    right: "8px",
-    bottom: "8px",
+    right: "6px",
+    bottom: "6px",
     width: "26px",
     height: "26px",
     minWidth: "26px",
@@ -187,26 +187,41 @@ const useStyles = makeStyles({
   bulkActionsRow: {
     display: "flex",
     justifyContent: "flex-end",
-    gap: "8px",
-    marginBottom: "10px",
+    gap: "6px",
+    marginBottom: "4px",
   },
   bulkButton: {
-    padding: "5px 8px",
+    padding: "6px 12px",
     fontSize: "11px",
     borderRadius: "6px",
-    border: "1px solid #30363d",
-    backgroundColor: "#0d1117",
-    color: "#c9d1d9",
+    border: "none",
+    backgroundColor: "#1f6feb",
+    color: "#ffffff",
     cursor: "pointer",
-    transition: "background 0.15s ease, border-color 0.15s ease",
+    fontWeight: "500",
+    transition: "background 0.15s ease, transform 0.15s ease",
     "&:hover:not(:disabled)": {
-      backgroundColor: "#161b22",
-      borderColor: "#484f58",
+      backgroundColor: "#0969da",
+      transform: "translateY(-1px)",
+    } as any,
+    "&:active:not(:disabled)": {
+      transform: "translateY(0)",
+      backgroundColor: "#0860ca",
     } as any,
     "&:disabled": {
       opacity: 0.5,
       cursor: "not-allowed",
+      backgroundColor: "#30363d",
     },
+  },
+  bulkButtonReject: {
+    backgroundColor: "#da3633",
+    "&:hover:not(:disabled)": {
+      backgroundColor: "#c93c37",
+    } as any,
+    "&:active:not(:disabled)": {
+      backgroundColor: "#b62324",
+    } as any,
   },
   thinking: {
     display: "flex",
@@ -881,7 +896,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                 Accept all ({pendingChangeCount})
               </button>
               <button
-                className={styles.bulkButton}
+                className={`${styles.bulkButton} ${styles.bulkButtonReject}`}
                 type="button"
                 onClick={handleRejectAll}
                 disabled={bulkIsProcessing || isLoading}
