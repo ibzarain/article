@@ -5,7 +5,7 @@ import {
   makeStyles,
   Spinner,
 } from "@fluentui/react-components";
-import { SparkleFilled, CheckmarkCircleFilled, DismissCircleFilled } from "@fluentui/react-icons";
+import { SparkleFilled, CheckmarkCircleFilled, DismissCircleFilled, ArrowUpRegular } from "@fluentui/react-icons";
 import { generateAgentResponse } from "../agent/wordAgent";
 import { createChangeTracker } from "../utils/changeTracker";
 import { DocumentChange, ChangeTracking } from "../types/changes";
@@ -80,10 +80,10 @@ const useStyles = makeStyles({
     alignSelf: "flex-start",
   },
   messageBubble: {
-    padding: "14px 18px",
+    padding: "12px 16px",
     borderRadius: "12px",
-    fontSize: "14px",
-    lineHeight: "1.6",
+    fontSize: "13px",
+    lineHeight: "1.5",
     wordWrap: "break-word",
     boxShadow: "0 1px 2px rgba(0, 0, 0, 0.1)",
   },
@@ -111,10 +111,10 @@ const useStyles = makeStyles({
   },
   textarea: {
     flex: 1,
-    minHeight: "44px",
+    minHeight: "40px",
     maxHeight: "200px",
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
-    fontSize: "14px",
+    fontSize: "13px",
     backgroundColor: "#0d1117",
     color: "#c9d1d9",
     border: "1px solid #30363d",
@@ -156,14 +156,14 @@ const useStyles = makeStyles({
     position: "absolute",
     right: "8px",
     bottom: "8px",
-    width: "28px",
-    height: "28px",
-    minWidth: "28px",
+    width: "26px",
+    height: "26px",
+    minWidth: "26px",
     backgroundColor: "#1f6feb",
     color: "#ffffff",
     border: "none",
     borderRadius: "6px",
-    fontSize: "14px",
+    fontSize: "12px",
     fontWeight: "500",
     cursor: "pointer",
     display: "flex",
@@ -191,9 +191,9 @@ const useStyles = makeStyles({
     marginBottom: "10px",
   },
   bulkButton: {
-    padding: "6px 10px",
-    fontSize: "12px",
-    borderRadius: "8px",
+    padding: "5px 8px",
+    fontSize: "11px",
+    borderRadius: "6px",
     border: "1px solid #30363d",
     backgroundColor: "#0d1117",
     color: "#c9d1d9",
@@ -211,11 +211,11 @@ const useStyles = makeStyles({
   thinking: {
     display: "flex",
     alignItems: "center",
-    gap: "10px",
+    gap: "8px",
     color: "#8b949e",
-    fontSize: "13px",
+    fontSize: "12px",
     fontStyle: "normal",
-    padding: "10px 18px",
+    padding: "8px 16px",
   },
   emptyState: {
     display: "flex",
@@ -233,8 +233,8 @@ const useStyles = makeStyles({
     opacity: 0.8,
   },
   emptyStateText: {
-    fontSize: "14px",
-    lineHeight: "1.7",
+    fontSize: "13px",
+    lineHeight: "1.6",
     maxWidth: "400px",
   },
   changeBlock: {
@@ -248,10 +248,10 @@ const useStyles = makeStyles({
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: "8px 12px",
+    padding: "6px 10px",
     backgroundColor: "#1c2128",
     borderBottom: "1px solid #30363d",
-    fontSize: "12px",
+    fontSize: "11px",
   },
   changeHeaderLeft: {
     display: "flex",
@@ -265,7 +265,7 @@ const useStyles = makeStyles({
     minWidth: 0,
   },
   changeHeaderSecondary: {
-    fontSize: "12px",
+    fontSize: "11px",
     color: "#8b949e",
     marginTop: "2px",
     whiteSpace: "nowrap",
@@ -274,9 +274,9 @@ const useStyles = makeStyles({
     maxWidth: "520px",
   },
   decisionPill: {
-    padding: "2px 8px",
+    padding: "2px 6px",
     borderRadius: "999px",
-    fontSize: "11px",
+    fontSize: "10px",
     fontWeight: 600,
     border: "1px solid #30363d",
   },
@@ -291,10 +291,10 @@ const useStyles = makeStyles({
     borderColor: "#6a2d2d",
   } as any,
   changeType: {
-    fontSize: "11px",
+    fontSize: "10px",
     fontWeight: "600",
     textTransform: "uppercase",
-    padding: "2px 6px",
+    padding: "2px 5px",
     borderRadius: "4px",
     letterSpacing: "0.5px",
   },
@@ -319,14 +319,14 @@ const useStyles = makeStyles({
     gap: "6px",
   },
   changeActionButton: {
-    padding: "4px 8px",
-    fontSize: "11px",
+    padding: "3px 6px",
+    fontSize: "10px",
     borderRadius: "4px",
     border: "none",
     cursor: "pointer",
     display: "flex",
     alignItems: "center",
-    gap: "4px",
+    gap: "3px",
     transition: "all 0.15s ease",
     fontWeight: "500",
   },
@@ -353,10 +353,10 @@ const useStyles = makeStyles({
     },
   },
   changeContent: {
-    padding: "12px",
+    padding: "10px",
     fontFamily: "'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace",
-    fontSize: "12px",
-    lineHeight: "1.6",
+    fontSize: "11px",
+    lineHeight: "1.5",
   },
   diffLine: {
     padding: "4px 8px",
@@ -923,7 +923,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
               {isLoading ? (
                 <Spinner size="tiny" />
               ) : (
-                <span style={{ fontSize: "16px", lineHeight: 1 }}>↑</span>
+                <ArrowUpRegular style={{ fontSize: "14px" }} />
               )}
             </button>
           </div>
