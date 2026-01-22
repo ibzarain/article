@@ -125,9 +125,12 @@ const useStyles = makeStyles({
     padding: "6px 12px",
     // Reserve a non-typable "toolbar lane" at the bottom
     // NOTE: keep this >= toolbar height so caret/last lines never go under it
-    paddingBottom: "64px",
+    paddingBottom: "48px",
     // Helps scroll positioning respect the toolbar lane
-    scrollPaddingBottom: "64px",
+    scrollPaddingBottom: "48px",
+    // Reserve space for the scrollbar when supported (prevents overlay scrollbars
+    // from being covered by the bottom-right button area).
+    scrollbarGutter: "stable",
     position: "relative",
     resize: "none",
     overflowY: "auto",
@@ -165,7 +168,8 @@ const useStyles = makeStyles({
     position: "absolute",
     bottom: "6px",
     left: "6px",
-    right: "6px",
+    // Leave room for the textarea scrollbar so it's always reachable
+    right: "34px",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
@@ -560,16 +564,16 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     e.preventDefault();
     const pastedText = e.clipboardData.getData('text/plain');
-    
+
     // Insert the pasted text at the cursor position, preserving formatting
     const textarea = e.currentTarget;
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
     const currentValue = input;
-    
+
     const newValue = currentValue.substring(0, start) + pastedText + currentValue.substring(end);
     setInput(newValue);
-    
+
     // Set cursor position after the pasted text using requestAnimationFrame for better timing
     requestAnimationFrame(() => {
       const newCursorPos = start + pastedText.length;
@@ -608,10 +612,10 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
       const askOnlyAgent =
         mode === "ask"
           ? {
-              ...agent,
-              tools: {},
-              system: `${(agent as any).system || ""}\n\nMODE: ASK. Do not call any tools. Do not edit the document. Answer conversationally and concisely.`,
-            }
+            ...agent,
+            tools: {},
+            system: `${(agent as any).system || ""}\n\nMODE: ASK. Do not call any tools. Do not edit the document. Answer conversationally and concisely.`,
+          }
           : agent;
 
       // HYBRID PATH: Algorithm for parsing/finding, minimal AI for insertion
@@ -852,128 +856,127 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
           ) : (
             messages.map((message, index) => {
               const prevMessage = index > 0 ? messages[index - 1] : null;
-              const shouldHaveGap = index === 0 || 
+              const shouldHaveGap = index === 0 ||
                 (prevMessage && prevMessage.role !== message.role);
-              
+
               return (
-              <div
-                key={message.messageId || index}
-                className={`${styles.message} ${message.role === "user" ? styles.userMessage : styles.assistantMessage
-                  } ${shouldHaveGap ? styles.messageWithGap : ""}`}
-              >
                 <div
-                  className={`${styles.messageBubble} ${message.role === "user" ? styles.userBubble : styles.assistantBubble
-                    }`}
-                  style={{ whiteSpace: "pre-wrap" }}
+                  key={message.messageId || index}
+                  className={`${styles.message} ${message.role === "user" ? styles.userMessage : styles.assistantMessage
+                    } ${shouldHaveGap ? styles.messageWithGap : ""}`}
                 >
-                  {message.content}
-                </div>
-                
-                {/* Show changes inline for assistant messages */}
-                {message.role === "assistant" && message.changes && message.changes.length > 0 && (
-                  <div className={styles.changesContainer}>
-                    {message.changes.map((change) => {
-                      const isProcessing = processingChanges.has(change.id);
-                      const decision = change.decision;
-                      const secondary = getSecondaryHeaderText(change);
-                      return (
-                        <div key={change.id} className={styles.changeBlock}>
-                          <div className={styles.changeHeader}>
-                            <div className={styles.changeHeaderLeft}>
-                              <span className={`${styles.changeType} ${getTypeClass(change.type)}`}>
-                                {change.type}
-                              </span>
-                              <div className={styles.changeHeaderMeta}>
-                                {secondary && (
-                                  <div className={styles.changeHeaderSecondary}>
-                                    {secondary}
-                                  </div>
+                  <div
+                    className={`${styles.messageBubble} ${message.role === "user" ? styles.userBubble : styles.assistantBubble
+                      }`}
+                    style={{ whiteSpace: "pre-wrap" }}
+                  >
+                    {message.content}
+                  </div>
+
+                  {/* Show changes inline for assistant messages */}
+                  {message.role === "assistant" && message.changes && message.changes.length > 0 && (
+                    <div className={styles.changesContainer}>
+                      {message.changes.map((change) => {
+                        const isProcessing = processingChanges.has(change.id);
+                        const decision = change.decision;
+                        const secondary = getSecondaryHeaderText(change);
+                        return (
+                          <div key={change.id} className={styles.changeBlock}>
+                            <div className={styles.changeHeader}>
+                              <div className={styles.changeHeaderLeft}>
+                                <span className={`${styles.changeType} ${getTypeClass(change.type)}`}>
+                                  {change.type}
+                                </span>
+                                <div className={styles.changeHeaderMeta}>
+                                  {secondary && (
+                                    <div className={styles.changeHeaderSecondary}>
+                                      {secondary}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              <div className={styles.changeActions}>
+                                {decision ? (
+                                  <span
+                                    className={`${styles.decisionPill} ${decision === "accepted" ? styles.acceptedPill : styles.rejectedPill
+                                      }`}
+                                  >
+                                    {decision === "accepted" ? "Accepted" : "Rejected"}
+                                  </span>
+                                ) : (
+                                  <>
+                                    <button
+                                      className={`${styles.changeActionButton} ${styles.acceptButton}`}
+                                      onClick={() => handleAcceptChange(change.id, message.messageId)}
+                                      disabled={isProcessing || bulkIsProcessing}
+                                      title="Accept change"
+                                    >
+                                      {isProcessing ? (
+                                        <Spinner size="tiny" />
+                                      ) : (
+                                        <>
+                                          <CheckmarkCircleFilled style={{ fontSize: "12px" }} />
+                                          Accept
+                                        </>
+                                      )}
+                                    </button>
+                                    <button
+                                      className={`${styles.changeActionButton} ${styles.rejectButton}`}
+                                      onClick={() => handleRejectChange(change.id, message.messageId)}
+                                      disabled={isProcessing || bulkIsProcessing}
+                                      title="Reject change"
+                                    >
+                                      {isProcessing ? (
+                                        <Spinner size="tiny" />
+                                      ) : (
+                                        <>
+                                          <DismissCircleFilled style={{ fontSize: "12px" }} />
+                                          Reject
+                                        </>
+                                      )}
+                                    </button>
+                                  </>
                                 )}
                               </div>
                             </div>
-                            <div className={styles.changeActions}>
-                              {decision ? (
-                                <span
-                                  className={`${styles.decisionPill} ${
-                                    decision === "accepted" ? styles.acceptedPill : styles.rejectedPill
-                                  }`}
-                                >
-                                  {decision === "accepted" ? "Accepted" : "Rejected"}
-                                </span>
-                              ) : (
+                            <div className={styles.changeContent}>
+                              {change.type === "edit" && (
                                 <>
-                                  <button
-                                    className={`${styles.changeActionButton} ${styles.acceptButton}`}
-                                    onClick={() => handleAcceptChange(change.id, message.messageId)}
-                                    disabled={isProcessing || bulkIsProcessing}
-                                    title="Accept change"
-                                  >
-                                    {isProcessing ? (
-                                      <Spinner size="tiny" />
-                                    ) : (
-                                      <>
-                                        <CheckmarkCircleFilled style={{ fontSize: "12px" }} />
-                                        Accept
-                                      </>
-                                    )}
-                                  </button>
-                                  <button
-                                    className={`${styles.changeActionButton} ${styles.rejectButton}`}
-                                    onClick={() => handleRejectChange(change.id, message.messageId)}
-                                    disabled={isProcessing || bulkIsProcessing}
-                                    title="Reject change"
-                                  >
-                                    {isProcessing ? (
-                                      <Spinner size="tiny" />
-                                    ) : (
-                                      <>
-                                        <DismissCircleFilled style={{ fontSize: "12px" }} />
-                                        Reject
-                                      </>
-                                    )}
-                                  </button>
+                                  {change.oldText && (
+                                    <div className={`${styles.diffLine} ${styles.diffOld}`}>
+                                      <span style={{ opacity: 0.7 }}>−</span> {change.oldText}
+                                    </div>
+                                  )}
+                                  {change.newText && (
+                                    <div className={`${styles.diffLine} ${styles.diffNew}`}>
+                                      <span style={{ opacity: 0.7 }}>+</span> {change.newText}
+                                    </div>
+                                  )}
                                 </>
+                              )}
+                              {change.type === "insert" && change.newText && (
+                                <div className={`${styles.diffLine} ${styles.diffInsert}`}>
+                                  <span style={{ opacity: 0.7 }}>+</span> {change.newText}
+                                </div>
+                              )}
+                              {change.type === "delete" && change.oldText && (
+                                <div className={`${styles.diffLine} ${styles.diffDelete}`}>
+                                  <span style={{ opacity: 0.7 }}>−</span> {change.oldText}
+                                </div>
+                              )}
+                              {change.type === "format" && (
+                                <div className={styles.changeDescription}>
+                                  Applied formatting to: "{change.searchText || 'selected text'}"
+                                </div>
                               )}
                             </div>
                           </div>
-                          <div className={styles.changeContent}>
-                            {change.type === "edit" && (
-                              <>
-                                {change.oldText && (
-                                  <div className={`${styles.diffLine} ${styles.diffOld}`}>
-                                    <span style={{ opacity: 0.7 }}>−</span> {change.oldText}
-                                  </div>
-                                )}
-                                {change.newText && (
-                                  <div className={`${styles.diffLine} ${styles.diffNew}`}>
-                                    <span style={{ opacity: 0.7 }}>+</span> {change.newText}
-                                  </div>
-                                )}
-                              </>
-                            )}
-                            {change.type === "insert" && change.newText && (
-                              <div className={`${styles.diffLine} ${styles.diffInsert}`}>
-                                <span style={{ opacity: 0.7 }}>+</span> {change.newText}
-                              </div>
-                            )}
-                            {change.type === "delete" && change.oldText && (
-                              <div className={`${styles.diffLine} ${styles.diffDelete}`}>
-                                <span style={{ opacity: 0.7 }}>−</span> {change.oldText}
-                              </div>
-                            )}
-                            {change.type === "format" && (
-                              <div className={styles.changeDescription}>
-                                Applied formatting to: "{change.searchText || 'selected text'}"
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
             })
           )}
           {isLoading && (
