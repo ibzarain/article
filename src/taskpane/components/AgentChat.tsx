@@ -5,7 +5,7 @@ import {
   makeStyles,
   Spinner,
 } from "@fluentui/react-components";
-import { SendRegular, SparkleFilled, CheckmarkCircleFilled, DismissCircleFilled } from "@fluentui/react-icons";
+import { SparkleFilled, CheckmarkCircleFilled, DismissCircleFilled } from "@fluentui/react-icons";
 import { generateAgentResponse } from "../agent/wordAgent";
 import { createChangeTracker } from "../utils/changeTracker";
 import { DocumentChange, ChangeTracking } from "../types/changes";
@@ -21,7 +21,7 @@ interface AgentChatProps {
 interface Message {
   role: "user" | "assistant";
   content: string;
-  changes?: DocumentChange[];
+  changes?: Array<DocumentChange & { decision?: "accepted" | "rejected" }>;
   messageId?: string;
 }
 
@@ -121,12 +121,28 @@ const useStyles = makeStyles({
     borderRadius: "12px",
     padding: "10px 50px 10px 16px",
     resize: "none",
+    overflowY: "auto",
     lineHeight: "1.5",
     whiteSpace: "pre-wrap",
     wordWrap: "break-word",
     overflowWrap: "break-word",
     textDecoration: "none",
     textDecorationLine: "none",
+    scrollbarWidth: "thin",
+    scrollbarColor: "#30363d #0d1117",
+    "&::-webkit-scrollbar": {
+      width: "8px",
+    },
+    "&::-webkit-scrollbar-track": {
+      background: "#0d1117",
+    },
+    "&::-webkit-scrollbar-thumb": {
+      background: "#30363d",
+      borderRadius: "6px",
+      "&:hover": {
+        background: "#484f58",
+      },
+    },
     "&:focus": {
       outline: "none",
       borderColor: "#1f6feb",
@@ -166,6 +182,30 @@ const useStyles = makeStyles({
       opacity: 0.4,
       cursor: "not-allowed",
       backgroundColor: "#30363d",
+    },
+  },
+  bulkActionsRow: {
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: "8px",
+    marginBottom: "10px",
+  },
+  bulkButton: {
+    padding: "6px 10px",
+    fontSize: "12px",
+    borderRadius: "8px",
+    border: "1px solid #30363d",
+    backgroundColor: "#0d1117",
+    color: "#c9d1d9",
+    cursor: "pointer",
+    transition: "background 0.15s ease, border-color 0.15s ease",
+    "&:hover:not(:disabled)": {
+      backgroundColor: "#161b22",
+      borderColor: "#484f58",
+    } as any,
+    "&:disabled": {
+      opacity: 0.5,
+      cursor: "not-allowed",
     },
   },
   thinking: {
@@ -213,6 +253,43 @@ const useStyles = makeStyles({
     borderBottom: "1px solid #30363d",
     fontSize: "12px",
   },
+  changeHeaderLeft: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    minWidth: 0,
+  },
+  changeHeaderMeta: {
+    display: "flex",
+    flexDirection: "column",
+    minWidth: 0,
+  },
+  changeHeaderSecondary: {
+    fontSize: "12px",
+    color: "#8b949e",
+    marginTop: "2px",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    maxWidth: "520px",
+  },
+  decisionPill: {
+    padding: "2px 8px",
+    borderRadius: "999px",
+    fontSize: "11px",
+    fontWeight: 600,
+    border: "1px solid #30363d",
+  },
+  acceptedPill: {
+    backgroundColor: "#1e4620",
+    color: "#89d185",
+    borderColor: "#2d5a2f",
+  } as any,
+  rejectedPill: {
+    backgroundColor: "#5a1d1d",
+    color: "#f48771",
+    borderColor: "#6a2d2d",
+  } as any,
   changeType: {
     fontSize: "11px",
     fontWeight: "600",
@@ -330,6 +407,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
   const [changeTracker] = useState<ChangeTracking>(() => createChangeTracker());
   const currentMessageChangesRef = useRef<DocumentChange[]>([]);
   const [processingChanges, setProcessingChanges] = useState<Set<string>>(new Set());
+  const [bulkIsProcessing, setBulkIsProcessing] = useState<boolean>(false);
   const messageIdCounter = useRef<number>(0);
   const styles = useStyles();
 
@@ -479,18 +557,25 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
     }
   };
 
+  const markDecision = (changeId: string, decision: "accepted" | "rejected", messageId?: string) => {
+    setMessages(prev =>
+      prev.map(msg => {
+        if (messageId && msg.messageId !== messageId) return msg;
+        if (!msg.changes) return msg;
+        const idx = msg.changes.findIndex(c => c.id === changeId);
+        if (idx === -1) return msg;
+        const nextChanges = msg.changes.map(c => (c.id === changeId ? { ...c, decision } : c));
+        return { ...msg, changes: nextChanges };
+      })
+    );
+  };
+
   const handleAcceptChange = async (changeId: string, messageId?: string) => {
     setProcessingChanges(prev => new Set(prev).add(changeId));
     try {
       await changeTracker.acceptChange(changeId);
-      // Update the message to remove the accepted change
-      if (messageId) {
-        setMessages(prev => prev.map(msg => 
-          msg.messageId === messageId && msg.changes
-            ? { ...msg, changes: msg.changes.filter(c => c.id !== changeId) }
-            : msg
-        ));
-      }
+      // Keep the change card in chat; just mark as accepted.
+      markDecision(changeId, "accepted", messageId);
     } catch (error) {
       console.error("Error accepting change:", error);
     } finally {
@@ -506,14 +591,8 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
     setProcessingChanges(prev => new Set(prev).add(changeId));
     try {
       await changeTracker.rejectChange(changeId);
-      // Update the message to remove the rejected change
-      if (messageId) {
-        setMessages(prev => prev.map(msg => 
-          msg.messageId === messageId && msg.changes
-            ? { ...msg, changes: msg.changes.filter(c => c.id !== changeId) }
-            : msg
-        ));
-      }
+      // Keep the change card in chat; just mark as rejected.
+      markDecision(changeId, "rejected", messageId);
     } catch (error) {
       console.error("Error rejecting change:", error);
     } finally {
@@ -563,6 +642,63 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
     return change.description;
   };
 
+  const getSecondaryHeaderText = (change: DocumentChange): string | null => {
+    // Avoid repeating huge "Inserted ... before ..." strings (diff block already shows content).
+    if (change.type === "format") {
+      return formatChangeDescription(change);
+    }
+    if (change.searchText) {
+      return `Near "${change.searchText}"`;
+    }
+    if (change.location) {
+      return change.location;
+    }
+    return null;
+  };
+
+  const getAllPendingChangeRefs = () => {
+    const refs: Array<{ changeId: string; messageId?: string }> = [];
+    for (const msg of messages) {
+      if (!msg.changes || msg.changes.length === 0) continue;
+      for (const c of msg.changes) {
+        if (!c.decision) {
+          refs.push({ changeId: c.id, messageId: msg.messageId });
+        }
+      }
+    }
+    return refs;
+  };
+
+  const pendingChangeCount = getAllPendingChangeRefs().length;
+
+  const handleAcceptAll = async () => {
+    const refs = getAllPendingChangeRefs();
+    if (refs.length === 0) return;
+    setBulkIsProcessing(true);
+    try {
+      for (const { changeId, messageId } of refs) {
+        // eslint-disable-next-line no-await-in-loop
+        await handleAcceptChange(changeId, messageId);
+      }
+    } finally {
+      setBulkIsProcessing(false);
+    }
+  };
+
+  const handleRejectAll = async () => {
+    const refs = getAllPendingChangeRefs();
+    if (refs.length === 0) return;
+    setBulkIsProcessing(true);
+    try {
+      for (const { changeId, messageId } of refs) {
+        // eslint-disable-next-line no-await-in-loop
+        await handleRejectChange(changeId, messageId);
+      }
+    } finally {
+      setBulkIsProcessing(false);
+    }
+  };
+
   const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -610,48 +746,66 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                   <div className={styles.changesContainer}>
                     {message.changes.map((change) => {
                       const isProcessing = processingChanges.has(change.id);
+                      const decision = change.decision;
+                      const secondary = getSecondaryHeaderText(change);
                       return (
                         <div key={change.id} className={styles.changeBlock}>
                           <div className={styles.changeHeader}>
-                            <div>
+                            <div className={styles.changeHeaderLeft}>
                               <span className={`${styles.changeType} ${getTypeClass(change.type)}`}>
                                 {change.type}
                               </span>
-                              <div className={styles.changeDescription}>
-                                {formatChangeDescription(change)}
+                              <div className={styles.changeHeaderMeta}>
+                                {secondary && (
+                                  <div className={styles.changeHeaderSecondary}>
+                                    {secondary}
+                                  </div>
+                                )}
                               </div>
                             </div>
                             <div className={styles.changeActions}>
-                              <button
-                                className={`${styles.changeActionButton} ${styles.acceptButton}`}
-                                onClick={() => handleAcceptChange(change.id, message.messageId)}
-                                disabled={isProcessing}
-                                title="Accept change"
-                              >
-                                {isProcessing ? (
-                                  <Spinner size="tiny" />
-                                ) : (
-                                  <>
-                                    <CheckmarkCircleFilled style={{ fontSize: "12px" }} />
-                                    Accept
-                                  </>
-                                )}
-                              </button>
-                              <button
-                                className={`${styles.changeActionButton} ${styles.rejectButton}`}
-                                onClick={() => handleRejectChange(change.id, message.messageId)}
-                                disabled={isProcessing}
-                                title="Reject change"
-                              >
-                                {isProcessing ? (
-                                  <Spinner size="tiny" />
-                                ) : (
-                                  <>
-                                    <DismissCircleFilled style={{ fontSize: "12px" }} />
-                                    Reject
-                                  </>
-                                )}
-                              </button>
+                              {decision ? (
+                                <span
+                                  className={`${styles.decisionPill} ${
+                                    decision === "accepted" ? styles.acceptedPill : styles.rejectedPill
+                                  }`}
+                                >
+                                  {decision === "accepted" ? "Accepted" : "Rejected"}
+                                </span>
+                              ) : (
+                                <>
+                                  <button
+                                    className={`${styles.changeActionButton} ${styles.acceptButton}`}
+                                    onClick={() => handleAcceptChange(change.id, message.messageId)}
+                                    disabled={isProcessing || bulkIsProcessing}
+                                    title="Accept change"
+                                  >
+                                    {isProcessing ? (
+                                      <Spinner size="tiny" />
+                                    ) : (
+                                      <>
+                                        <CheckmarkCircleFilled style={{ fontSize: "12px" }} />
+                                        Accept
+                                      </>
+                                    )}
+                                  </button>
+                                  <button
+                                    className={`${styles.changeActionButton} ${styles.rejectButton}`}
+                                    onClick={() => handleRejectChange(change.id, message.messageId)}
+                                    disabled={isProcessing || bulkIsProcessing}
+                                    title="Reject change"
+                                  >
+                                    {isProcessing ? (
+                                      <Spinner size="tiny" />
+                                    ) : (
+                                      <>
+                                        <DismissCircleFilled style={{ fontSize: "12px" }} />
+                                        Reject
+                                      </>
+                                    )}
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </div>
                           <div className={styles.changeContent}>
@@ -715,6 +869,28 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
         )}
 
         <div className={styles.inputContainer}>
+          {pendingChangeCount > 0 && (
+            <div className={styles.bulkActionsRow}>
+              <button
+                className={styles.bulkButton}
+                type="button"
+                onClick={handleAcceptAll}
+                disabled={bulkIsProcessing || isLoading}
+                title="Accept all pending changes"
+              >
+                Accept all ({pendingChangeCount})
+              </button>
+              <button
+                className={styles.bulkButton}
+                type="button"
+                onClick={handleRejectAll}
+                disabled={bulkIsProcessing || isLoading}
+                title="Reject all pending changes"
+              >
+                Reject all
+              </button>
+            </div>
+          )}
           <div className={styles.inputRow}>
             <textarea
               ref={textareaRef}
@@ -747,7 +923,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
               {isLoading ? (
                 <Spinner size="tiny" />
               ) : (
-                <SendRegular style={{ fontSize: "14px" }} />
+                <span style={{ fontSize: "16px", lineHeight: 1 }}>↑</span>
               )}
             </button>
           </div>
