@@ -5,7 +5,7 @@ import {
   makeStyles,
   Spinner,
 } from "@fluentui/react-components";
-import { SparkleFilled, CheckmarkCircleFilled, DismissCircleFilled, ArrowUpRegular } from "@fluentui/react-icons";
+import { SparkleFilled, CheckmarkCircleFilled, DismissCircleFilled, ArrowUpRegular, EditRegular, ChatRegular } from "@fluentui/react-icons";
 import { generateAgentResponse } from "../agent/wordAgent";
 import { createChangeTracker } from "../utils/changeTracker";
 import { DocumentChange, ChangeTracking } from "../types/changes";
@@ -108,12 +108,12 @@ const useStyles = makeStyles({
     flexShrink: 0,
   },
   inputRow: {
+    position: "relative",
     display: "flex",
-    flexDirection: "column",
-    gap: "4px",
+    alignItems: "center",
   },
   textarea: {
-    width: "100%",
+    flex: 1,
     minHeight: "40px",
     maxHeight: "200px",
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
@@ -123,6 +123,8 @@ const useStyles = makeStyles({
     border: "1px solid #30363d",
     borderRadius: "8px",
     padding: "6px 12px",
+    paddingBottom: "32px",
+    position: "relative",
     resize: "none",
     overflowY: "auto",
     lineHeight: "1.5",
@@ -156,15 +158,47 @@ const useStyles = makeStyles({
     },
   },
   buttonRow: {
+    position: "absolute",
+    bottom: "4px",
+    left: "4px",
+    right: "4px",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    width: "100%",
+    pointerEvents: "none",
+    zIndex: 10,
   },
   buttonRowLeft: {
     display: "flex",
-    gap: "6px",
+    gap: "4px",
     alignItems: "center",
+    pointerEvents: "auto",
+  },
+  modeSelector: {
+    padding: "4px 8px",
+    fontSize: "10px",
+    borderRadius: "5px",
+    border: "none",
+    backgroundColor: "#21262d",
+    color: "#c9d1d9",
+    cursor: "pointer",
+    fontWeight: "500",
+    transition: "background 0.15s ease",
+    whiteSpace: "nowrap",
+    height: "24px",
+    display: "flex",
+    alignItems: "center",
+    gap: "4px",
+    "&:hover": {
+      backgroundColor: "#30363d",
+    } as any,
+  },
+  modeSelectorActive: {
+    backgroundColor: "#1f6feb",
+    color: "#ffffff",
+    "&:hover": {
+      backgroundColor: "#0969da",
+    } as any,
   },
   sendButton: {
     width: "24px",
@@ -181,6 +215,7 @@ const useStyles = makeStyles({
     alignItems: "center",
     justifyContent: "center",
     transition: "all 0.15s ease",
+    pointerEvents: "auto",
     "&:hover:not(:disabled)": {
       backgroundColor: "#0969da",
       transform: "scale(1.05)",
@@ -209,6 +244,7 @@ const useStyles = makeStyles({
     height: "24px",
     display: "flex",
     alignItems: "center",
+    pointerEvents: "auto",
     "&:hover:not(:disabled)": {
       backgroundColor: "#0969da",
     } as any,
@@ -423,6 +459,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
   const [input, setInput] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<"edit" | "ask">("edit");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [changeTracker] = useState<ChangeTracking>(() => createChangeTracker());
@@ -909,7 +946,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                   handleSend();
                 }
               }}
-              placeholder="Ask me to edit your document..."
+              placeholder={mode === "edit" ? "Ask me to edit your document..." : "Ask me a question..."}
               disabled={isLoading}
               rows={1}
               spellCheck={false}
@@ -920,6 +957,24 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
             />
             <div className={styles.buttonRow}>
               <div className={styles.buttonRowLeft}>
+                <button
+                  className={`${styles.modeSelector} ${mode === "edit" ? styles.modeSelectorActive : ""}`}
+                  type="button"
+                  onClick={() => setMode("edit")}
+                  title="Edit mode"
+                >
+                  <EditRegular style={{ fontSize: "12px" }} />
+                  Edit
+                </button>
+                <button
+                  className={`${styles.modeSelector} ${mode === "ask" ? styles.modeSelectorActive : ""}`}
+                  type="button"
+                  onClick={() => setMode("ask")}
+                  title="Ask mode"
+                >
+                  <ChatRegular style={{ fontSize: "12px" }} />
+                  Ask
+                </button>
                 {pendingChangeCount > 0 && (
                   <>
                     <button
