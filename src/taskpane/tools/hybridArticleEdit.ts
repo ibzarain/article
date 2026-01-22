@@ -18,13 +18,13 @@ export function setHybridArticleChangeTracker(tracker: (change: DocumentChange) 
  */
 function createScopedReadDocumentTool(articleBoundaries: ArticleBoundaries) {
   return {
-    description: 'Search ARTICLE content for a query and return contextual snippets around each match. This is a SEARCH tool - use it to find exact text before editing. Returns matches with snippets showing context.',
+    description: 'Search ARTICLE content for a query and return contextual snippets around each match. This is a SEARCH tool - use it to find exact text before editing. Returns matches with snippets showing context. If query is "*" or "all", returns the full article content.',
     parameters: {
       type: 'object',
       properties: {
         query: {
           type: 'string',
-          description: 'Text to search for in the article. This is a search query - use it to find exact text before making edits.',
+          description: 'Text to search for in the article. This is a search query - use it to find exact text before making edits. Use "*" or "all" to get the full article content.',
         },
         contextChars: {
           type: 'number',
@@ -70,6 +70,24 @@ function createScopedReadDocumentTool(articleBoundaries: ArticleBoundaries) {
           await context.sync();
           
           const text = articleRange.text || '';
+          
+          // If query is "*" or "all", return full article content
+          if (query === '*' || query.toLowerCase() === 'all') {
+            console.log(`[readDocument] Returning full article content (${text.length} characters)`);
+            return {
+              matches: [{
+                matchText: 'FULL ARTICLE CONTENT',
+                snippet: text,
+                matchStart: 0,
+                matchEnd: text.length,
+                snippetStart: 0,
+                snippetEnd: text.length,
+              }],
+              totalFound: 1,
+              articleLength: text.length,
+              fullContent: text, // Add full content flag
+            };
+          }
           const safeContextChars = Math.max(0, Math.floor(contextChars || 0));
           const safeMaxMatches = typeof maxMatches === 'number' && maxMatches > 0 ? Math.floor(maxMatches) : undefined;
 
@@ -151,8 +169,16 @@ function createScopedReadDocumentTool(articleBoundaries: ArticleBoundaries) {
             matches,
             totalFound,
             articleLength: text.length,
+            fullContent: (result as any).fullContent, // Preserve full content if present
           };
         });
+        
+        // Log the result
+        if (query === '*' || query.toLowerCase() === 'all') {
+          console.log(`[readDocument] Full article content retrieved:`, result.fullContent);
+        } else {
+          console.log(`[readDocument] Search for "${query}" found ${result.totalFound} match(es)`);
+        }
         
         return {
           success: true,
@@ -160,6 +186,7 @@ function createScopedReadDocumentTool(articleBoundaries: ArticleBoundaries) {
           content: result.matches,
           totalFound: result.totalFound,
           articleLength: result.articleLength,
+          fullContent: result.fullContent, // Include full content in response
         };
       } catch (error) {
         return {
@@ -836,6 +863,13 @@ export async function executeArticleInstructionsHybrid(
       };
     }
     
+    // Log the article content that was extracted
+    console.log(`[executeArticleInstructionsHybrid] Extracted ARTICLE ${articleName}:`);
+    console.log(`  Start paragraph: ${articleBoundaries.startParagraphIndex}`);
+    console.log(`  End paragraph: ${articleBoundaries.endParagraphIndex}`);
+    console.log(`  Content length: ${articleBoundaries.articleContent.length} characters`);
+    console.log(`  Full content:`, articleBoundaries.articleContent);
+    
     // Create scoped tools that only work within the article
     const scopedReadDocument = createScopedReadDocumentTool(articleBoundaries);
     const scopedEditTools = createScopedEditTools(articleBoundaries, articleName);
@@ -861,35 +895,46 @@ CURRENT ARTICLE CONTENT (for reference):
 ${articleContentPreview}
 
 AVAILABLE TOOLS:
-- readDocument: SEARCH tool - Search ARTICLE ${articleName} for a query and return contextual snippets around each match. MANDATORY: Call this FIRST before any insert/edit/delete. Returns matches with snippets showing context. Use the matchText from results as searchText.
+- readDocument: SEARCH tool - Search ARTICLE ${articleName} for a query and return contextual snippets around each match. MANDATORY: Call this FIRST before any insert/edit/delete. Returns matches with snippets showing context. Use the matchText from results as searchText. IMPORTANT: If you call readDocument with query "*" or "all", it will return the FULL article content. You MUST call this at the start to get the full article content and return it to the user.
 - editDocument: Find and replace text within ARTICLE ${articleName} only. Requires searchText from readDocument results.
 - insertText: Insert new text within ARTICLE ${articleName} only. MANDATORY: Requires searchText from readDocument results. If user says "before X", you MUST find X via readDocument first, then use that matchText as searchText with location: "before".
 - deleteText: Delete text from ARTICLE ${articleName} only. Requires searchText from readDocument results.
 
 MANDATORY WORKFLOW - FOLLOW THIS EXACTLY:
-1. UNDERSTAND the user's instruction. If they say "before 'The Construction Manager shall:'", you MUST find that exact text or a close variation.
+1. FIRST STEP - GET FULL ARTICLE CONTENT:
+   - IMMEDIATELY call readDocument with query "*" or "all" to get the FULL article content
+   - This will return the complete article text
+   - You MUST return this full article content to the user in your response
+   - Log it: "Here is the full content of ARTICLE ${articleName} that I found: [full content]"
 
-2. ALWAYS call readDocument FIRST with the text the user specified:
+2. UNDERSTAND the user's instruction. If they say "before 'The Construction Manager shall:'", you MUST find that exact text or a close variation.
+
+3. ALWAYS call readDocument with the specific text the user specified:
    - If user says "before 'The Construction Manager shall:'", search for "The Construction Manager shall" (with or without colon)
    - Review the readDocument results - you MUST see matches before proceeding
    - If no matches found, try variations: "Construction Manager shall", "The Construction Manager", etc.
    - DO NOT proceed to insert/edit until you've found the location via readDocument
 
-3. Once readDocument returns matches:
+4. Once readDocument returns matches:
    - Use the EXACT matchText from the results as searchText for insertText
    - If multiple matches, use the first one (or the one that makes sense in context)
    - Call insertText with location: "before" and the matchText as searchText
 
-4. CRITICAL: If readDocument doesn't find the text after multiple searches:
+5. CRITICAL: If readDocument doesn't find the text after multiple searches:
    - Report what you searched for and that it wasn't found
    - DO NOT default to "beginning" or "end" - that's wrong!
    - Ask the user for clarification or an alternative search term
 
-5. NEVER insert at "beginning" or "end" unless the user explicitly asks for that. If user says "before X", you MUST find X first.
+6. NEVER insert at "beginning" or "end" unless the user explicitly asks for that. If user says "before X", you MUST find X first.
 
-6. Use ONE tool call at a time. Wait for the tool result before deciding the next action.
+7. Use ONE tool call at a time. Wait for the tool result before deciding the next action.
 
-7. For insertText: location "before"/"after"/"inline" requires searchText from readDocument results.
+8. For insertText: location "before"/"after"/"inline" requires searchText from readDocument results.
+
+9. FINAL STEP: After completing all edits, return a summary that includes:
+   - The full article content you retrieved at the start
+   - What changes you made
+   - Confirmation that edits were applied
 
 The user has provided the following instructions for ARTICLE ${articleName}:
 ${instruction}
