@@ -5,7 +5,7 @@ import {
   makeStyles,
   Spinner,
 } from "@fluentui/react-components";
-import { SparkleFilled, CheckmarkCircleFilled, DismissCircleFilled, ArrowUpRegular, EditRegular, ChatRegular } from "@fluentui/react-icons";
+import { SparkleFilled, CheckmarkCircleFilled, DismissCircleFilled, ArrowUpRegular, EditRegular, ChatRegular, ChevronDownRegular } from "@fluentui/react-icons";
 import { generateAgentResponse } from "../agent/wordAgent";
 import { createChangeTracker } from "../utils/changeTracker";
 import { DocumentChange, ChangeTracking } from "../types/changes";
@@ -123,7 +123,7 @@ const useStyles = makeStyles({
     border: "1px solid #30363d",
     borderRadius: "8px",
     padding: "6px 12px",
-    paddingBottom: "32px",
+    paddingBottom: "36px",
     position: "relative",
     resize: "none",
     overflowY: "auto",
@@ -159,9 +159,9 @@ const useStyles = makeStyles({
   },
   buttonRow: {
     position: "absolute",
-    bottom: "4px",
-    left: "4px",
-    right: "4px",
+    bottom: "6px",
+    left: "6px",
+    right: "6px",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
@@ -174,26 +174,63 @@ const useStyles = makeStyles({
     alignItems: "center",
     pointerEvents: "auto",
   },
+  buttonRowRight: {
+    display: "flex",
+    gap: "4px",
+    alignItems: "center",
+    pointerEvents: "auto",
+  },
   modeSelector: {
     padding: "4px 8px",
     fontSize: "10px",
     borderRadius: "5px",
-    border: "none",
+    border: "1px solid #30363d",
     backgroundColor: "#21262d",
     color: "#c9d1d9",
     cursor: "pointer",
     fontWeight: "500",
-    transition: "background 0.15s ease",
+    transition: "background 0.15s ease, border-color 0.15s ease",
     whiteSpace: "nowrap",
     height: "24px",
     display: "flex",
     alignItems: "center",
     gap: "4px",
+    position: "relative",
     "&:hover": {
       backgroundColor: "#30363d",
+      borderColor: "#484f58",
     } as any,
   },
-  modeSelectorActive: {
+  modeSelectorDropdown: {
+    position: "absolute",
+    bottom: "100%",
+    left: "0",
+    marginBottom: "4px",
+    backgroundColor: "#1c2128",
+    border: "1px solid #30363d",
+    borderRadius: "6px",
+    overflow: "hidden",
+    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)",
+    zIndex: 100,
+    minWidth: "100px",
+  },
+  modeSelectorOption: {
+    padding: "6px 12px",
+    fontSize: "11px",
+    color: "#c9d1d9",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    backgroundColor: "transparent",
+    border: "none",
+    width: "100%",
+    textAlign: "left",
+    "&:hover": {
+      backgroundColor: "#21262d",
+    } as any,
+  },
+  modeSelectorOptionActive: {
     backgroundColor: "#1f6feb",
     color: "#ffffff",
     "&:hover": {
@@ -235,8 +272,8 @@ const useStyles = makeStyles({
     fontSize: "10px",
     borderRadius: "5px",
     border: "none",
-    backgroundColor: "#1f6feb",
-    color: "#ffffff",
+    backgroundColor: "rgba(34, 197, 94, 0.15)",
+    color: "#89d185",
     cursor: "pointer",
     fontWeight: "500",
     transition: "background 0.15s ease",
@@ -246,24 +283,25 @@ const useStyles = makeStyles({
     alignItems: "center",
     pointerEvents: "auto",
     "&:hover:not(:disabled)": {
-      backgroundColor: "#0969da",
+      backgroundColor: "rgba(34, 197, 94, 0.25)",
     } as any,
     "&:active:not(:disabled)": {
-      backgroundColor: "#0860ca",
+      backgroundColor: "rgba(34, 197, 94, 0.35)",
     } as any,
     "&:disabled": {
       opacity: 0.5,
       cursor: "not-allowed",
-      backgroundColor: "#30363d",
+      backgroundColor: "rgba(48, 54, 61, 0.5)",
     },
   },
   bulkButtonReject: {
-    backgroundColor: "#da3633",
+    backgroundColor: "rgba(244, 135, 113, 0.15)",
+    color: "#f48771",
     "&:hover:not(:disabled)": {
-      backgroundColor: "#c93c37",
+      backgroundColor: "rgba(244, 135, 113, 0.25)",
     } as any,
     "&:active:not(:disabled)": {
-      backgroundColor: "#b62324",
+      backgroundColor: "rgba(244, 135, 113, 0.35)",
     } as any,
   },
   thinking: {
@@ -460,6 +498,8 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<"edit" | "ask">("edit");
+  const [showModeDropdown, setShowModeDropdown] = useState<boolean>(false);
+  const modeDropdownRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [changeTracker] = useState<ChangeTracking>(() => createChangeTracker());
@@ -490,6 +530,20 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    if (!showModeDropdown) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (modeDropdownRef.current && !modeDropdownRef.current.contains(event.target as Node)) {
+        setShowModeDropdown(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showModeDropdown]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -957,24 +1011,50 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
             />
             <div className={styles.buttonRow}>
               <div className={styles.buttonRowLeft}>
-                <button
-                  className={`${styles.modeSelector} ${mode === "edit" ? styles.modeSelectorActive : ""}`}
-                  type="button"
-                  onClick={() => setMode("edit")}
-                  title="Edit mode"
-                >
-                  <EditRegular style={{ fontSize: "12px" }} />
-                  Edit
-                </button>
-                <button
-                  className={`${styles.modeSelector} ${mode === "ask" ? styles.modeSelectorActive : ""}`}
-                  type="button"
-                  onClick={() => setMode("ask")}
-                  title="Ask mode"
-                >
-                  <ChatRegular style={{ fontSize: "12px" }} />
-                  Ask
-                </button>
+                <div ref={modeDropdownRef} style={{ position: "relative" }}>
+                  <button
+                    className={styles.modeSelector}
+                    type="button"
+                    onClick={() => setShowModeDropdown(!showModeDropdown)}
+                    title="Select mode"
+                  >
+                    {mode === "edit" ? (
+                      <EditRegular style={{ fontSize: "12px" }} />
+                    ) : (
+                      <ChatRegular style={{ fontSize: "12px" }} />
+                    )}
+                    {mode === "edit" ? "Edit" : "Ask"}
+                    <ChevronDownRegular style={{ fontSize: "10px", marginLeft: "2px" }} />
+                  </button>
+                  {showModeDropdown && (
+                    <div className={styles.modeSelectorDropdown}>
+                      <button
+                        className={`${styles.modeSelectorOption} ${mode === "edit" ? styles.modeSelectorOptionActive : ""}`}
+                        type="button"
+                        onClick={() => {
+                          setMode("edit");
+                          setShowModeDropdown(false);
+                        }}
+                      >
+                        <EditRegular style={{ fontSize: "12px" }} />
+                        Edit
+                      </button>
+                      <button
+                        className={`${styles.modeSelectorOption} ${mode === "ask" ? styles.modeSelectorOptionActive : ""}`}
+                        type="button"
+                        onClick={() => {
+                          setMode("ask");
+                          setShowModeDropdown(false);
+                        }}
+                      >
+                        <ChatRegular style={{ fontSize: "12px" }} />
+                        Ask
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className={styles.buttonRowRight}>
                 {pendingChangeCount > 0 && (
                   <>
                     <button
@@ -997,20 +1077,20 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                     </button>
                   </>
                 )}
+                <button
+                  disabled={!input.trim() || isLoading}
+                  onClick={handleSend}
+                  className={styles.sendButton}
+                  title="Send message (Enter)"
+                  type="button"
+                >
+                  {isLoading ? (
+                    <Spinner size="tiny" />
+                  ) : (
+                    <ArrowUpRegular style={{ fontSize: "14px" }} />
+                  )}
+                </button>
               </div>
-              <button
-                disabled={!input.trim() || isLoading}
-                onClick={handleSend}
-                className={styles.sendButton}
-                title="Send message (Enter)"
-                type="button"
-              >
-                {isLoading ? (
-                  <Spinner size="tiny" />
-                ) : (
-                  <ArrowUpRegular style={{ fontSize: "14px" }} />
-                )}
-              </button>
             </div>
           </div>
         </div>
