@@ -47,7 +47,7 @@ const useStyles = makeStyles({
     flex: 1,
     display: "flex",
     flexDirection: "column",
-    gap: "8px",
+    gap: "0",
     overflowY: "auto",
     overflowX: "hidden",
     padding: "20px 24px",
@@ -72,6 +72,9 @@ const useStyles = makeStyles({
     flexDirection: "column",
     gap: "4px",
     maxWidth: "85%",
+  },
+  messageWithGap: {
+    marginTop: "12px",
   },
   userMessage: {
     alignSelf: "flex-end",
@@ -99,18 +102,18 @@ const useStyles = makeStyles({
     borderBottomLeftRadius: "4px",
   },
   inputContainer: {
-    padding: "8px 12px",
+    padding: "6px 10px",
     borderTop: "1px solid #21262d",
     backgroundColor: "#0d1117",
     flexShrink: 0,
   },
   inputRow: {
-    position: "relative",
     display: "flex",
-    alignItems: "center",
+    flexDirection: "column",
+    gap: "4px",
   },
   textarea: {
-    flex: 1,
+    width: "100%",
     minHeight: "40px",
     maxHeight: "200px",
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
@@ -119,8 +122,7 @@ const useStyles = makeStyles({
     color: "#c9d1d9",
     border: "1px solid #30363d",
     borderRadius: "8px",
-    padding: "8px 44px 8px 12px",
-    position: "relative",
+    padding: "6px 12px",
     resize: "none",
     overflowY: "auto",
     lineHeight: "1.5",
@@ -153,17 +155,25 @@ const useStyles = makeStyles({
       color: "#6e7681",
     },
   },
+  buttonRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    width: "100%",
+  },
+  buttonRowLeft: {
+    display: "flex",
+    gap: "6px",
+    alignItems: "center",
+  },
   sendButton: {
-    position: "absolute",
-    right: "6px",
-    bottom: "6px",
-    width: "26px",
-    height: "26px",
-    minWidth: "26px",
+    width: "24px",
+    height: "24px",
+    minWidth: "24px",
     backgroundColor: "#1f6feb",
     color: "#ffffff",
     border: "none",
-    borderRadius: "6px",
+    borderRadius: "5px",
     fontSize: "12px",
     fontWeight: "500",
     cursor: "pointer",
@@ -186,22 +196,23 @@ const useStyles = makeStyles({
     },
   },
   bulkButton: {
-    padding: "5px 9px",
+    padding: "4px 8px",
     fontSize: "10px",
-    borderRadius: "6px",
+    borderRadius: "5px",
     border: "none",
     backgroundColor: "#1f6feb",
     color: "#ffffff",
     cursor: "pointer",
     fontWeight: "500",
-    transition: "background 0.15s ease, transform 0.15s ease",
+    transition: "background 0.15s ease",
     whiteSpace: "nowrap",
+    height: "24px",
+    display: "flex",
+    alignItems: "center",
     "&:hover:not(:disabled)": {
       backgroundColor: "#0969da",
-      transform: "translateY(-1px)",
     } as any,
     "&:active:not(:disabled)": {
-      transform: "translateY(0)",
       backgroundColor: "#0860ca",
     } as any,
     "&:disabled": {
@@ -218,14 +229,6 @@ const useStyles = makeStyles({
     "&:active:not(:disabled)": {
       backgroundColor: "#b62324",
     } as any,
-  },
-  bulkButtonContainer: {
-    position: "absolute",
-    bottom: "6px",
-    left: "6px",
-    display: "flex",
-    gap: "6px",
-    zIndex: 10,
   },
   thinking: {
     display: "flex",
@@ -257,7 +260,6 @@ const useStyles = makeStyles({
     maxWidth: "400px",
   },
   changeBlock: {
-    marginTop: "12px",
     border: "1px solid #30363d",
     borderRadius: "8px",
     overflow: "hidden",
@@ -411,8 +413,8 @@ const useStyles = makeStyles({
   changesContainer: {
     display: "flex",
     flexDirection: "column",
-    gap: "8px",
-    marginTop: "12px",
+    gap: "6px",
+    marginTop: "8px",
   },
 });
 
@@ -746,11 +748,16 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
               </div>
             </div>
           ) : (
-            messages.map((message, index) => (
+            messages.map((message, index) => {
+              const prevMessage = index > 0 ? messages[index - 1] : null;
+              const shouldHaveGap = index === 0 || 
+                (prevMessage && prevMessage.role !== message.role);
+              
+              return (
               <div
                 key={message.messageId || index}
                 className={`${styles.message} ${message.role === "user" ? styles.userMessage : styles.assistantMessage
-                  }`}
+                  } ${shouldHaveGap ? styles.messageWithGap : ""}`}
               >
                 <div
                   className={`${styles.messageBubble} ${message.role === "user" ? styles.userBubble : styles.assistantBubble
@@ -864,7 +871,8 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                   </div>
                 )}
               </div>
-            ))
+            );
+            })
           )}
           {isLoading && (
             <div className={styles.thinking}>
@@ -909,45 +917,46 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
               data-gramm="false"
               data-gramm_editor="false"
               data-enable-grammarly="false"
-              style={{
-                paddingLeft: pendingChangeCount > 0 ? "140px" : "12px",
-              }}
             />
-            {pendingChangeCount > 0 && (
-              <div className={styles.bulkButtonContainer}>
-                <button
-                  className={styles.bulkButton}
-                  type="button"
-                  onClick={handleAcceptAll}
-                  disabled={bulkIsProcessing || isLoading}
-                  title="Accept all pending changes"
-                >
-                  Accept all ({pendingChangeCount})
-                </button>
-                <button
-                  className={`${styles.bulkButton} ${styles.bulkButtonReject}`}
-                  type="button"
-                  onClick={handleRejectAll}
-                  disabled={bulkIsProcessing || isLoading}
-                  title="Reject all pending changes"
-                >
-                  Reject all
-                </button>
+            <div className={styles.buttonRow}>
+              <div className={styles.buttonRowLeft}>
+                {pendingChangeCount > 0 && (
+                  <>
+                    <button
+                      className={styles.bulkButton}
+                      type="button"
+                      onClick={handleAcceptAll}
+                      disabled={bulkIsProcessing || isLoading}
+                      title="Accept all pending changes"
+                    >
+                      Accept all ({pendingChangeCount})
+                    </button>
+                    <button
+                      className={`${styles.bulkButton} ${styles.bulkButtonReject}`}
+                      type="button"
+                      onClick={handleRejectAll}
+                      disabled={bulkIsProcessing || isLoading}
+                      title="Reject all pending changes"
+                    >
+                      Reject all
+                    </button>
+                  </>
+                )}
               </div>
-            )}
-            <button
-              disabled={!input.trim() || isLoading}
-              onClick={handleSend}
-              className={styles.sendButton}
-              title="Send message (Enter)"
-              type="button"
-            >
-              {isLoading ? (
-                <Spinner size="tiny" />
-              ) : (
-                <ArrowUpRegular style={{ fontSize: "14px" }} />
-              )}
-            </button>
+              <button
+                disabled={!input.trim() || isLoading}
+                onClick={handleSend}
+                className={styles.sendButton}
+                title="Send message (Enter)"
+                type="button"
+              >
+                {isLoading ? (
+                  <Spinner size="tiny" />
+                ) : (
+                  <ArrowUpRegular style={{ fontSize: "14px" }} />
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>
