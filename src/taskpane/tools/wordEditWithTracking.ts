@@ -110,11 +110,11 @@ export const editDocumentTool = tool({
  * Enhanced to assess format context and insert appropriately (paragraph vs inline)
  */
 export const insertTextTool = tool({
-  description: 'Insert text into the Word document at a specific location. Automatically assesses format context: if inserting after a list item/bullet point, creates a new bullet point; if inserting in a paragraph, creates a new paragraph; if inserting inline in a sentence, inserts inline. Preserves all formatting including lists, styles, and paragraph formatting.',
+  description: 'Insert text into the Word document at a specific location. IMPORTANT: Before using this tool, you should FIRST use readDocument to understand the document content semantically and find the exact text. Extract the exact text from the readDocument snippets to use as searchText. Automatically assesses format context: if inserting after a list item/bullet point, creates a new bullet point; if inserting in a paragraph, creates a new paragraph; if inserting inline in a sentence, inserts inline. Preserves all formatting including lists, styles, and paragraph formatting.',
   parameters: z.object({
     text: z.string().describe('The text to insert'),
     location: z.enum(['before', 'after', 'beginning', 'end', 'inline']).describe('Where to insert: "before" or "after" a search text, "beginning" or "end" of document, or "inline" to insert within the found text (sentence context)'),
-    searchText: z.string().optional().describe('Required if location is "before", "after", or "inline". The text to search for to determine insertion point.'),
+    searchText: z.string().optional().describe('Required if location is "before", "after", or "inline". The exact text to search for - should be extracted from readDocument snippets after semantic understanding of the document.'),
   }),
   execute: async ({ text, location, searchText }) => {
     try {
@@ -139,7 +139,8 @@ export const insertTextTool = tool({
             throw new Error('searchText is required when location is "before", "after", or "inline"');
           }
           
-          const searchResults = context.document.body.search(searchText, {
+          // Try exact search first
+          let searchResults = context.document.body.search(searchText, {
             matchCase: false,
             matchWholeWord: false,
           });
@@ -147,8 +148,40 @@ export const insertTextTool = tool({
           context.load(searchResults, 'items');
           await context.sync();
           
+          // If exact match fails, try some variations (trimmed, without punctuation, etc.)
           if (searchResults.items.length === 0) {
-            throw new Error(`Search text "${searchText}" not found in document`);
+            const trimmedSearch = searchText.trim();
+            if (trimmedSearch !== searchText && trimmedSearch.length > 0) {
+              searchResults = context.document.body.search(trimmedSearch, {
+                matchCase: false,
+                matchWholeWord: false,
+              });
+              context.load(searchResults, 'items');
+              await context.sync();
+            }
+          }
+          
+          // If still not found, try searching for a shorter substring (last 20 chars or so)
+          if (searchResults.items.length === 0 && searchText.length > 20) {
+            const shortSearch = searchText.substring(Math.max(0, searchText.length - 30)).trim();
+            if (shortSearch.length > 5) {
+              searchResults = context.document.body.search(shortSearch, {
+                matchCase: false,
+                matchWholeWord: false,
+              });
+              context.load(searchResults, 'items');
+              await context.sync();
+            }
+          }
+          
+          if (searchResults.items.length === 0) {
+            // Provide helpful error message that guides to use readDocument
+            throw new Error(
+              `Search text "${searchText}" not found in document. ` +
+              `Please use readDocument tool first to understand the document content semantically, ` +
+              `then extract the exact text from the snippets returned. ` +
+              `The text in the document may differ slightly from what was requested.`
+            );
           }
           
           foundRange = searchResults.items[0];

@@ -75,10 +75,32 @@ function createScopedReadDocumentTool(articleBoundaries: ArticleBoundaries) {
 
           // Escape regex special characters
           const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          const escapedQuery = escapeRegExp(query);
-          const pattern = matchWholeWord ? `\\b${escapedQuery}\\b` : escapedQuery;
-          const flags = matchCase ? 'g' : 'gi';
-          const regex = new RegExp(pattern, flags);
+          
+          // Try multiple search patterns to handle punctuation variations
+          const searchPatterns: string[] = [];
+          
+          // Original query
+          searchPatterns.push(query);
+          
+          // Without trailing punctuation
+          if (/[.:;]$/.test(query)) {
+            searchPatterns.push(query.replace(/[.:;]+$/, ''));
+          }
+          
+          // With punctuation added
+          if (!/[.:;]$/.test(query)) {
+            searchPatterns.push(query + ':');
+            searchPatterns.push(query + '.');
+          }
+          
+          // Trimmed version
+          const trimmed = query.trim();
+          if (trimmed !== query) {
+            searchPatterns.push(trimmed);
+          }
+          
+          // Remove duplicates
+          const uniquePatterns = Array.from(new Set(searchPatterns));
 
           const matches: Array<{
             matchText: string;
@@ -90,25 +112,38 @@ function createScopedReadDocumentTool(articleBoundaries: ArticleBoundaries) {
           }> = [];
 
           let totalFound = 0;
-          let match: RegExpExecArray | null;
+          const foundPositions = new Set<number>(); // Track positions to avoid duplicates
 
-          while ((match = regex.exec(text)) !== null) {
-            totalFound++;
+          // Try each pattern
+          for (const patternQuery of uniquePatterns) {
+            const escapedQuery = escapeRegExp(patternQuery);
+            const pattern = matchWholeWord ? `\\b${escapedQuery}\\b` : escapedQuery;
+            const flags = matchCase ? 'g' : 'gi';
+            const regex = new RegExp(pattern, flags);
 
-            const matchStart = match.index;
-            const matchEnd = matchStart + match[0].length;
-            const snippetStart = Math.max(0, matchStart - safeContextChars);
-            const snippetEnd = Math.min(text.length, matchEnd + safeContextChars);
+            let match: RegExpExecArray | null;
+            while ((match = regex.exec(text)) !== null) {
+              // Avoid counting the same match twice
+              if (!foundPositions.has(match.index)) {
+                foundPositions.add(match.index);
+                totalFound++;
 
-            if (!safeMaxMatches || matches.length < safeMaxMatches) {
-              matches.push({
-                matchText: match[0],
-                snippet: text.slice(snippetStart, snippetEnd),
-                matchStart,
-                matchEnd,
-                snippetStart,
-                snippetEnd,
-              });
+                const matchStart = match.index;
+                const matchEnd = matchStart + match[0].length;
+                const snippetStart = Math.max(0, matchStart - safeContextChars);
+                const snippetEnd = Math.min(text.length, matchEnd + safeContextChars);
+
+                if (!safeMaxMatches || matches.length < safeMaxMatches) {
+                  matches.push({
+                    matchText: match[0],
+                    snippet: text.slice(snippetStart, snippetEnd),
+                    matchStart,
+                    matchEnd,
+                    snippetStart,
+                    snippetEnd,
+                  });
+                }
+              }
             }
           }
 
@@ -287,11 +322,13 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
               context.load(searchResults, 'items');
               await context.sync();
               
+              const searchAttempts: string[] = [searchText];
+              
               // If not found, try with different whitespace handling
               if (searchResults.items.length === 0) {
-                // Try trimming the search text
                 const trimmedSearch = searchText.trim();
                 if (trimmedSearch !== searchText) {
+                  searchAttempts.push(trimmedSearch);
                   searchResults = articleRange.search(trimmedSearch, {
                     matchCase: false,
                     matchWholeWord: false,
@@ -301,10 +338,11 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                 }
               }
               
-              // If still not found, try without punctuation at the end
+              // Try without punctuation at the end
               if (searchResults.items.length === 0 && searchText && /[.:;]/.test(searchText)) {
                 const withoutPunct = searchText.replace(/[.:;]+$/, '').trim();
-                if (withoutPunct && withoutPunct !== searchText) {
+                if (withoutPunct && withoutPunct !== searchText && !searchAttempts.includes(withoutPunct)) {
+                  searchAttempts.push(withoutPunct);
                   searchResults = articleRange.search(withoutPunct, {
                     matchCase: false,
                     matchWholeWord: false,
@@ -314,23 +352,45 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                 }
               }
               
-              // Also try with punctuation added if original didn't have it
+              // Try with punctuation added if original didn't have it
               if (searchResults.items.length === 0 && searchText && !/[.:;]$/.test(searchText)) {
                 const withPunct = searchText + ':';
-                searchResults = articleRange.search(withPunct, {
-                  matchCase: false,
-                  matchWholeWord: false,
-                });
-                context.load(searchResults, 'items');
-                await context.sync();
+                if (!searchAttempts.includes(withPunct)) {
+                  searchAttempts.push(withPunct);
+                  searchResults = articleRange.search(withPunct, {
+                    matchCase: false,
+                    matchWholeWord: false,
+                  });
+                  context.load(searchResults, 'items');
+                  await context.sync();
+                }
+              }
+              
+              // Try partial match - just the key words if it's a phrase
+              if (searchResults.items.length === 0 && searchText) {
+                const words = searchText.trim().split(/\s+/);
+                if (words.length > 2) {
+                  // Try last 2-3 words (e.g., "Construction Manager shall" from "The Construction Manager shall:")
+                  const partialSearch = words.slice(-3).join(' ');
+                  if (partialSearch && !searchAttempts.includes(partialSearch)) {
+                    searchAttempts.push(partialSearch);
+                    searchResults = articleRange.search(partialSearch, {
+                      matchCase: false,
+                      matchWholeWord: false,
+                    });
+                    context.load(searchResults, 'items');
+                    await context.sync();
+                  }
+                }
               }
               
               if (searchResults.items.length === 0) {
                 // Get article content snippet for better error message
                 context.load(articleRange, 'text');
                 await context.sync();
-                const articlePreview = articleRange.text.substring(0, 500);
-                throw new Error(`Search text "${searchText}" not found in ARTICLE ${articleName}. Searched within article content. Please use readDocument first to find the exact text. Article preview: ${articlePreview}...`);
+                const articlePreview = articleRange.text.substring(0, 1000);
+                const searchedTerms = searchAttempts.join('", "');
+                throw new Error(`Search text "${searchText}" not found in ARTICLE ${articleName}. Tried: "${searchedTerms}". Article content preview: ${articlePreview.substring(0, 500)}... Please use readDocument first to find the exact text in the article.`);
               }
               
               // Log the search for debugging
