@@ -45,11 +45,11 @@ function createScopedReadDocumentTool(articleBoundaries: ArticleBoundaries) {
       },
       required: ['query'],
     },
-    execute: async ({ query, contextChars = 800, maxMatches, matchCase = false, matchWholeWord = false }: { 
-      query: string; 
-      contextChars?: number; 
-      maxMatches?: number; 
-      matchCase?: boolean; 
+    execute: async ({ query, contextChars = 800, maxMatches, matchCase = false, matchWholeWord = false }: {
+      query: string;
+      contextChars?: number;
+      maxMatches?: number;
+      matchCase?: boolean;
       matchWholeWord?: boolean;
     }) => {
       try {
@@ -60,17 +60,17 @@ function createScopedReadDocumentTool(articleBoundaries: ArticleBoundaries) {
           await context.sync();
           const startParagraph = paragraphs.items[articleBoundaries.startParagraphIndex];
           const endParagraph = paragraphs.items[articleBoundaries.endParagraphIndex];
-          
+
           const startRange = startParagraph.getRange('Start');
           const endRange = endParagraph.getRange('End');
           const articleRange = startRange.expandTo(endRange);
-          
+
           // Get article text for regex search
           context.load(articleRange, 'text');
           await context.sync();
-          
+
           const text = articleRange.text || '';
-          
+
           // If query is "*" or "all", return full article content
           if (query === '*' || query.toLowerCase() === 'all') {
             console.log(`[readDocument] Returning full article content (${text.length} characters)`);
@@ -93,30 +93,30 @@ function createScopedReadDocumentTool(articleBoundaries: ArticleBoundaries) {
 
           // Escape regex special characters
           const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          
+
           // Try multiple search patterns to handle punctuation variations
           const searchPatterns: string[] = [];
-          
+
           // Original query
           searchPatterns.push(query);
-          
+
           // Without trailing punctuation
           if (/[.:;]$/.test(query)) {
             searchPatterns.push(query.replace(/[.:;]+$/, ''));
           }
-          
+
           // With punctuation added
           if (!/[.:;]$/.test(query)) {
             searchPatterns.push(query + ':');
             searchPatterns.push(query + '.');
           }
-          
+
           // Trimmed version
           const trimmed = query.trim();
           if (trimmed !== query) {
             searchPatterns.push(trimmed);
           }
-          
+
           // Remove duplicates
           const uniquePatterns = Array.from(new Set(searchPatterns));
 
@@ -184,14 +184,14 @@ function createScopedReadDocumentTool(articleBoundaries: ArticleBoundaries) {
           articleLength: number;
           fullContent?: string;
         };
-        
+
         // Log the result
         if (query === '*' || query.toLowerCase() === 'all') {
           console.log(`[readDocument] Full article content retrieved:`, result.fullContent);
         } else {
           console.log(`[readDocument] Search for "${query}" found ${result.totalFound} match(es)`);
         }
-        
+
         return {
           success: true,
           query,
@@ -245,35 +245,35 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
             const startRange = startParagraph.getRange('Start');
             const endRange = endParagraph.getRange('End');
             const articleRange = startRange.expandTo(endRange);
-            
+
             // Search only within the article range
             const searchResults = articleRange.search(searchText, {
               matchCase: matchCase || false,
               matchWholeWord: matchWholeWord || false,
             });
-            
+
             context.load(searchResults, 'items');
             await context.sync();
-            
+
             if (searchResults.items.length === 0) {
               throw new Error(`Text "${searchText}" not found in article`);
             }
-            
+
             const itemsToReplace = replaceAll ? searchResults.items : [searchResults.items[0]];
             let replacementCount = 0;
             const capturedOldTexts: string[] = [];
-            
+
             for (const item of itemsToReplace) {
               context.load(item, 'text');
               await context.sync();
               const actualOldText = item.text;
-              
+
               replacementCount++;
               capturedOldTexts.push(actualOldText);
             }
-            
+
             await context.sync();
-            
+
             return {
               replaced: replacementCount,
               totalFound: searchResults.items.length,
@@ -307,8 +307,7 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                 await renderInlineDiff(changeObj);
               } catch (e) {
                 warnings.push(
-                  `Edit succeeded, but failed to render inline diff: ${
-                    e instanceof Error ? e.message : String(e)
+                  `Edit succeeded, but failed to render inline diff: ${e instanceof Error ? e.message : String(e)
                   }`
                 );
               }
@@ -317,14 +316,13 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                 await changeTracker(changeObj);
               } catch (e) {
                 warnings.push(
-                  `Edit succeeded, but failed to record change: ${
-                    e instanceof Error ? e.message : String(e)
+                  `Edit succeeded, but failed to record change: ${e instanceof Error ? e.message : String(e)
                   }`
                 );
               }
             }
           }
-          
+
           return {
             success: true,
             replaced: result.replaced,
@@ -346,8 +344,8 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
         type: 'object',
         properties: {
           text: { type: 'string', description: 'The text to insert' },
-          location: { 
-            type: 'string', 
+          location: {
+            type: 'string',
             enum: ['before', 'after', 'beginning', 'end', 'inline'],
             description: 'Where to insert: "before" or "after" a search text, "beginning" or "end" of article, or "inline" to insert within the found text',
           },
@@ -369,41 +367,46 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
             const startRange = startParagraph.getRange('Start');
             const endRange = endParagraph.getRange('End');
             const articleRange = startRange.expandTo(endRange);
-            
+
             let insertLocation: Word.InsertLocation;
             let range: Word.Range;
             let targetParagraph: Word.Paragraph | null = null;
             let foundRange: Word.Range | null = null;
-            
+            let insertAsNewParagraph = false; // Track if we should insert as new paragraph vs inline
+
             if (location === 'beginning') {
               range = startRange;
               insertLocation = Word.InsertLocation.after;
+              targetParagraph = startParagraph;
+              insertAsNewParagraph = text.includes('\n'); // Multiline = new paragraph
             } else if (location === 'end') {
               range = endRange;
               insertLocation = Word.InsertLocation.before;
+              targetParagraph = endParagraph;
+              insertAsNewParagraph = text.includes('\n'); // Multiline = new paragraph
             } else if (location === 'before' || location === 'after' || location === 'inline') {
               if (!searchText) {
                 throw new Error('searchText is required when location is "before", "after", or "inline"');
               }
-              
+
               // Search only within article range
               // Try multiple search strategies to find the text
               // Normalize search text: remove extra whitespace, handle line breaks
               const normalizeSearchText = (text: string): string => {
                 return text.replace(/\s+/g, ' ').trim();
               };
-              
+
               const normalizedSearch = normalizeSearchText(searchText);
               let searchResults = articleRange.search(normalizedSearch, {
                 matchCase: false,
                 matchWholeWord: false,
               });
-              
+
               context.load(searchResults, 'items');
               await context.sync();
-              
+
               const searchAttempts: string[] = [normalizedSearch];
-              
+
               // If not found, try original (might have different whitespace)
               if (searchResults.items.length === 0 && searchText !== normalizedSearch) {
                 searchAttempts.push(searchText);
@@ -414,7 +417,7 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                 context.load(searchResults, 'items');
                 await context.sync();
               }
-              
+
               // If not found, try with different whitespace handling
               if (searchResults.items.length === 0) {
                 const trimmedSearch = normalizedSearch.trim();
@@ -428,7 +431,7 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                   await context.sync();
                 }
               }
-              
+
               // Try without punctuation at the end
               if (searchResults.items.length === 0 && normalizedSearch && /[.:;]/.test(normalizedSearch)) {
                 const withoutPunct = normalizedSearch.replace(/[.:;]+$/, '').trim();
@@ -442,7 +445,7 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                   await context.sync();
                 }
               }
-              
+
               // Try with punctuation added if original didn't have it
               if (searchResults.items.length === 0 && normalizedSearch && !/[.:;]$/.test(normalizedSearch)) {
                 const withPunct = normalizedSearch + ':';
@@ -456,7 +459,7 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                   await context.sync();
                 }
               }
-              
+
               // Try partial match - just the key words if it's a phrase
               if (searchResults.items.length === 0 && normalizedSearch) {
                 const words = normalizedSearch.trim().split(/\s+/);
@@ -487,7 +490,7 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                   }
                 }
               }
-              
+
               // Fallback: search paragraph by paragraph if range search fails
               if (searchResults.items.length === 0) {
                 // Get all paragraphs in the article
@@ -495,17 +498,17 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                 for (let i = articleBoundaries.startParagraphIndex; i <= articleBoundaries.endParagraphIndex; i++) {
                   articleParagraphs.push(paragraphs.items[i]);
                 }
-                
+
                 // Load all paragraph texts first
                 for (const para of articleParagraphs) {
                   context.load(para, 'text');
                 }
                 await context.sync();
-                
+
                 // Search each paragraph individually using Word's search API
                 for (const para of articleParagraphs) {
                   const paraRange = para.getRange('Whole');
-                  
+
                   // Try normalized search first
                   let paraSearchResults = paraRange.search(normalizedSearch, {
                     matchCase: false,
@@ -513,7 +516,7 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                   });
                   context.load(paraSearchResults, 'items');
                   await context.sync();
-                  
+
                   // If not found, try original search text
                   if (paraSearchResults.items.length === 0 && searchText !== normalizedSearch) {
                     paraSearchResults = paraRange.search(searchText, {
@@ -523,13 +526,13 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                     context.load(paraSearchResults, 'items');
                     await context.sync();
                   }
-                  
+
                   // If still not found, try searching in the paragraph text directly
                   if (paraSearchResults.items.length === 0) {
                     const paraText = para.text || '';
                     const searchLower = normalizedSearch.toLowerCase();
                     const paraTextLower = paraText.toLowerCase();
-                    
+
                     if (paraTextLower.includes(searchLower)) {
                       // Found in text, now try to get the range using a substring search
                       // Try to find a unique substring that includes our search text
@@ -540,7 +543,7 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                         const startPos = Math.max(0, searchIndex - 5);
                         const endPos = Math.min(paraText.length, searchIndex + normalizedSearch.length + 5);
                         const contextSearch = paraText.substring(startPos, endPos);
-                        
+
                         // Try searching for this context string
                         paraSearchResults = paraRange.search(contextSearch, {
                           matchCase: false,
@@ -548,7 +551,7 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                         });
                         context.load(paraSearchResults, 'items');
                         await context.sync();
-                        
+
                         // If that doesn't work, try just the core words
                         if (paraSearchResults.items.length === 0) {
                           const words = normalizedSearch.split(/\s+/).filter(w => w.length > 2);
@@ -565,14 +568,14 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                       }
                     }
                   }
-                  
+
                   if (paraSearchResults.items.length > 0) {
                     searchResults = paraSearchResults;
                     break;
                   }
                 }
               }
-              
+
               // ALWAYS set up fallback paragraph BEFORE trying to use Word search results
               // This way we have a backup if Word search returns invalid results
               let fallbackParagraph: Word.Paragraph | null = null;
@@ -580,12 +583,12 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
               for (let i = articleBoundaries.startParagraphIndex; i <= articleBoundaries.endParagraphIndex; i++) {
                 articleParagraphs.push(paragraphs.items[i]);
               }
-              
+
               for (const para of articleParagraphs) {
                 context.load(para, 'text');
               }
               await context.sync();
-              
+
               const normalizedNeedle = normalizeSearchText(searchText).toLowerCase();
               for (const para of articleParagraphs) {
                 const normalizedHaystack = normalizeSearchText(para.text || '').toLowerCase();
@@ -594,7 +597,7 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                   break;
                 }
               }
-              
+
               if (searchResults.items.length === 0 && !fallbackParagraph) {
                 // Get article content snippet for better error message
                 context.load(articleRange, 'text');
@@ -603,10 +606,10 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                 const searchedTerms = searchAttempts.join('", "');
                 throw new Error(`Search text "${searchText}" not found in ARTICLE ${articleName}. Tried: "${searchedTerms}". Article content preview: ${articlePreview.substring(0, 500)}... Please use readDocument first to find the exact text in the article.`);
               }
-              
+
               // Log the search for debugging
               console.log(`[insertText] Searching for: "${searchText}", found ${searchResults.items.length} match(es) in ARTICLE ${articleName}`);
-              
+
               // Try to use Word search results, but fall back to paragraph-based if it fails
               let useWordSearch = false;
               if (searchResults.items.length > 0) {
@@ -615,11 +618,11 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                   foundRange = searchResults.items[0];
                   targetParagraph = foundRange.paragraphs.getFirst();
                   context.load(targetParagraph, ['listItem', 'list', 'text', 'style']);
-                  
+
                   // Get paragraph text to check context
                   context.load(targetParagraph, 'text');
                   await context.sync();
-                  
+
                   // If we got here, Word search worked
                   useWordSearch = true;
                 } catch (error) {
@@ -628,10 +631,10 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                   useWordSearch = false;
                 }
               }
-              
+
               if (useWordSearch && targetParagraph) {
                 const paragraphText = targetParagraph.text || '';
-                
+
                 // Check if the found text is at the very beginning of the paragraph
                 // (allowing for minimal whitespace)
                 // Use the actual found text from the range, not searchText (which might have different punctuation)
@@ -640,11 +643,12 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                 const actualFoundText = foundRange!.text || '';
                 const foundTextStart = paragraphText.toLowerCase().indexOf(actualFoundText.toLowerCase());
                 const textBeforeMatch = foundTextStart >= 0 ? paragraphText.substring(0, foundTextStart).trim() : '';
-                
+
                 if (location === 'inline') {
                   // Inline: insert right after the found text (within the sentence)
                   range = foundRange!;
                   insertLocation = Word.InsertLocation.after;
+                  insertAsNewParagraph = false;
                 } else if (location === 'before') {
                   // "Before" means: insert right before the found text
                   // Check if the text is at the very start of the paragraph
@@ -652,10 +656,19 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                     // Text is at paragraph start - insert as new paragraph before this paragraph
                     range = targetParagraph.getRange('Start');
                     insertLocation = Word.InsertLocation.before;
+                    insertAsNewParagraph = true;
                   } else {
-                    // Text is in the middle or end of paragraph - insert right before the found text
-                    range = foundRange!;
-                    insertLocation = Word.InsertLocation.before;
+                    // Text is in the middle or end of paragraph
+                    // For multiline text, insert as new paragraph; otherwise inline
+                    if (text.includes('\n')) {
+                      range = targetParagraph.getRange('Start');
+                      insertLocation = Word.InsertLocation.before;
+                      insertAsNewParagraph = true;
+                    } else {
+                      range = foundRange!;
+                      insertLocation = Word.InsertLocation.before;
+                      insertAsNewParagraph = false;
+                    }
                   }
                 } else {
                   // For "after", check if we should insert after paragraph or after text
@@ -665,97 +678,79 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                     // Text is at or near end of paragraph - insert after paragraph
                     range = targetParagraph.getRange('End');
                     insertLocation = Word.InsertLocation.after;
+                    insertAsNewParagraph = true;
                   } else {
-                    // Text is in middle - insert right after the found text
-                    range = foundRange!;
-                    insertLocation = Word.InsertLocation.after;
+                    // Text is in middle
+                    // For multiline text, insert as new paragraph; otherwise inline
+                    if (text.includes('\n')) {
+                      range = targetParagraph.getRange('End');
+                      insertLocation = Word.InsertLocation.after;
+                      insertAsNewParagraph = true;
+                    } else {
+                      range = foundRange!;
+                      insertLocation = Word.InsertLocation.after;
+                      insertAsNewParagraph = false;
+                    }
                   }
                 }
               } else if (fallbackParagraph) {
                 targetParagraph = fallbackParagraph;
-                
+
                 if (location === 'inline') {
                   throw new Error('Unable to locate inline insertion point via Word search. Please use a longer, more specific searchText from readDocument.');
                 } else if (location === 'before') {
                   range = targetParagraph.getRange('Start');
                   insertLocation = Word.InsertLocation.before;
+                  insertAsNewParagraph = text.includes('\n'); // Multiline = new paragraph
                 } else {
                   range = targetParagraph.getRange('End');
                   insertLocation = Word.InsertLocation.after;
+                  insertAsNewParagraph = text.includes('\n'); // Multiline = new paragraph
                 }
               }
             } else {
               throw new Error(`Invalid location: ${location}`);
             }
-            
+
             await context.sync();
-            
+
             // Insert the text intelligently based on location and context
+            // Use the insertAsNewParagraph flag we set earlier to determine insertion method
             let insertedRange: Word.Range;
-            
-            // Check if we're inserting at paragraph boundaries
-            const paragraphStart = targetParagraph ? targetParagraph.getRange('Start') : null;
-            const paragraphEnd = targetParagraph ? targetParagraph.getRange('End') : null;
-            
-            if (location === 'before' && targetParagraph && paragraphStart) {
-              // Check if range is at paragraph start by comparing positions
-              context.load(range, 'start');
-              context.load(paragraphStart, 'start');
+
+            if (insertAsNewParagraph && targetParagraph) {
+              // Insert as a new paragraph (preserves formatting better for multiline text)
+              // Determine the correct InsertLocation based on the location parameter
+              const paragraphInsertLocation = 
+                location === 'before' || location === 'end' 
+                  ? Word.InsertLocation.before 
+                  : Word.InsertLocation.after;
+              const newParagraph = targetParagraph.insertParagraph(text, paragraphInsertLocation);
+              context.load(newParagraph, ['style']);
               await context.sync();
-              
-              if (range.start === paragraphStart.start) {
-                // Inserting before paragraph start - create new paragraph
-                const newParagraph = targetParagraph.insertParagraph(text, Word.InsertLocation.before);
-                context.load(newParagraph, ['style']);
+
+              // Preserve paragraph style if it exists
+              if (targetParagraph.style && targetParagraph.style !== 'Normal') {
+                newParagraph.style = targetParagraph.style;
                 await context.sync();
-                
-                // Preserve paragraph style if it exists
-                if (targetParagraph.style && targetParagraph.style !== 'Normal') {
-                  newParagraph.style = targetParagraph.style;
-                  await context.sync();
-                }
-                
-                insertedRange = newParagraph.getRange();
-              } else {
-                // Inserting right before found text - add space if needed
-                const textToInsert = text.endsWith(' ') || text.endsWith('\n') ? text : text + ' ';
-                insertedRange = range.insertText(textToInsert, Word.InsertLocation.before);
               }
-            } else if (location === 'after' && targetParagraph && paragraphEnd) {
-              // Check if range is at paragraph end
-              context.load(range, 'start');
-              context.load(paragraphEnd, 'start');
-              await context.sync();
-              
-              if (range.start === paragraphEnd.start) {
-                // Inserting after paragraph end - create new paragraph
-                const newParagraph = targetParagraph.insertParagraph(text, Word.InsertLocation.after);
-                context.load(newParagraph, ['style']);
-                await context.sync();
-                
-                // Preserve paragraph style if it exists
-                if (targetParagraph.style && targetParagraph.style !== 'Normal') {
-                  newParagraph.style = targetParagraph.style;
-                  await context.sync();
-                }
-                
-                insertedRange = newParagraph.getRange();
-              } else {
-                // Inserting right after found text - add space if needed
-                const textToInsert = text.startsWith(' ') || text.startsWith('\n') ? text : ' ' + text;
-                insertedRange = range.insertText(textToInsert, Word.InsertLocation.after);
-              }
-            } else if (location === 'after' || location === 'inline') {
-              // Inserting after found text - add space if needed
+
+              insertedRange = newParagraph.getRange();
+            } else if (location === 'inline') {
+              // Inline insertion: insert text directly after found text
+              const textToInsert = text.startsWith(' ') || text.startsWith('\n') ? text : ' ' + text;
+              insertedRange = range.insertText(textToInsert, Word.InsertLocation.after);
+            } else if (location === 'after') {
+              // Inserting after found text - add space if needed for inline insertion
               const textToInsert = text.startsWith(' ') || text.startsWith('\n') ? text : ' ' + text;
               insertedRange = range.insertText(textToInsert, Word.InsertLocation.after);
             } else {
-              // Regular text insertion
+              // Regular text insertion (before found text, or beginning/end of article)
               insertedRange = range.insertText(text, insertLocation);
             }
-            
+
             await context.sync();
-            
+
             // Apply green color to inserted text immediately
             insertedRange.font.color = '#89d185';
             await context.sync();
@@ -786,8 +781,7 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
               await renderInlineDiff(changeObj);
             } catch (e) {
               warnings.push(
-                `Inserted text successfully, but failed to render inline diff: ${
-                  e instanceof Error ? e.message : String(e)
+                `Inserted text successfully, but failed to render inline diff: ${e instanceof Error ? e.message : String(e)
                 }`
               );
             }
@@ -796,8 +790,7 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
               await changeTracker(changeObj);
             } catch (e) {
               warnings.push(
-                `Inserted text successfully, but failed to record change: ${
-                  e instanceof Error ? e.message : String(e)
+                `Inserted text successfully, but failed to record change: ${e instanceof Error ? e.message : String(e)
                 }`
               );
             }
@@ -840,30 +833,30 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
             const startRange = startParagraph.getRange('Start');
             const endRange = endParagraph.getRange('End');
             const articleRange = startRange.expandTo(endRange);
-            
+
             // Search only within article range
             const searchResults = articleRange.search(searchText, {
               matchCase: matchCase || false,
               matchWholeWord: matchWholeWord || false,
             });
-            
+
             context.load(searchResults, 'items');
             await context.sync();
-            
+
             if (searchResults.items.length === 0) {
               throw new Error(`Text "${searchText}" not found in article`);
             }
-            
+
             const itemsToDelete = deleteAll ? searchResults.items : [searchResults.items[0]];
             let deletionCount = 0;
-            
+
             for (const item of itemsToDelete) {
               context.load(item, 'text');
               await context.sync();
               const deletedText = item.text;
-              
+
               deletionCount++;
-              
+
               // Track the change (renderInlineDiff will handle the visual diff)
               if (changeTracker) {
                 const changeObj: DocumentChange = {
@@ -876,23 +869,23 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                   applied: false,
                   canUndo: true,
                 };
-                
+
                 // Render inline diff (this will show deleted text with strikethrough/red)
                 await renderInlineDiff(changeObj);
-                
+
                 // Track the change
                 await changeTracker(changeObj);
               }
             }
-            
+
             await context.sync();
-            
+
             return {
               deleted: deletionCount,
               totalFound: searchResults.items.length,
             };
           });
-          
+
           return {
             success: true,
             deleted: result.deleted,
@@ -930,7 +923,7 @@ export async function executeArticleInstructionsHybrid(
         error: 'Could not parse article name from instruction. Expected format: "ARTICLE A-1" or "A-1"',
       };
     }
-    
+
     // Extract article boundaries
     const articleBoundaries = await extractArticle(`ARTICLE ${articleName}`);
     if (!articleBoundaries) {
@@ -939,24 +932,24 @@ export async function executeArticleInstructionsHybrid(
         error: `Article "${articleName}" not found in document`,
       };
     }
-    
+
     // Log the article content that was extracted
     console.log(`[executeArticleInstructionsHybrid] Extracted ARTICLE ${articleName}:`);
     console.log(`  Start paragraph: ${articleBoundaries.startParagraphIndex}`);
     console.log(`  End paragraph: ${articleBoundaries.endParagraphIndex}`);
     console.log(`  Content length: ${articleBoundaries.articleContent.length} characters`);
     console.log(`  Full content:`, articleBoundaries.articleContent);
-    
+
     // Create scoped tools that only work within the article
     const scopedReadDocument = createScopedReadDocumentTool(articleBoundaries);
     const scopedEditTools = createScopedEditTools(articleBoundaries, articleName);
-    
+
     // Create a scoped agent with only article content
     // Include the article content directly in the prompt so AI knows what it's working with
-    const articleContentPreview = articleBoundaries.articleContent.length > 2000 
+    const articleContentPreview = articleBoundaries.articleContent.length > 2000
       ? articleBoundaries.articleContent.substring(0, 2000) + '...'
       : articleBoundaries.articleContent;
-    
+
     const scopedAgent = {
       apiKey,
       model,
@@ -1018,11 +1011,11 @@ ${instruction}
 
 Use your AI intelligence to understand where to make the changes, then use the tools to execute them.`,
     };
-    
+
     // Generate response using the scoped agent
     // The agent will only see and work with the article content
     const response = await generateAgentResponse(scopedAgent, instruction);
-    
+
     return {
       success: true,
       results: [response],
