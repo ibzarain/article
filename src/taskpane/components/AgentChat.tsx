@@ -129,16 +129,16 @@ const useStyles = makeStyles({
   textarea: {
     flex: 1,
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
-    fontSize: "13px",
+    fontSize: "12px",
     backgroundColor: "transparent",
     color: "#c9d1d9",
     border: "none",
     borderRadius: "6px",
-    padding: "4px 6px",
+    padding: "4px 4px",
     scrollbarGutter: "stable",
     position: "relative",
     resize: "none",
-    overflowY: "auto",
+    overflowY: "hidden",
     lineHeight: "1.5",
     whiteSpace: "pre-wrap",
     wordWrap: "break-word",
@@ -606,7 +606,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
 
   useEffect(() => {
     if (!modeMenuOpen) {
-      return () => {};
+      return () => { };
     }
 
     const onMouseDown = (e: MouseEvent) => {
@@ -657,11 +657,19 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
     const singleLineHeight = lineHeight + paddingTop + paddingBottom + borderTop + borderBottom;
     const maxHeightPx = lineHeight * MAX_LINES + paddingTop + paddingBottom + borderTop + borderBottom;
 
-    // Reset height to auto to get natural scrollHeight
+    // Save current height to detect if we need to recalculate
+    const currentHeight = textarea.style.height;
+    
+    // Temporarily set overflow to hidden and height to auto to get accurate scrollHeight
+    textarea.style.overflowY = "hidden";
     textarea.style.height = "auto";
+    
+    // Force a reflow to ensure scrollHeight is calculated
+    void textarea.offsetHeight;
+    
     const scrollHeight = textarea.scrollHeight;
     
-    // Set height to scrollHeight, but cap at maxHeightPx
+    // Set height to scrollHeight, but ensure minimum is singleLineHeight and max is maxHeightPx
     const nextHeight = Math.max(singleLineHeight, Math.min(scrollHeight, maxHeightPx));
     textarea.style.height = `${nextHeight}px`;
     
@@ -1145,6 +1153,12 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                 className={styles.textarea}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
+                onInput={() => {
+                  // Resize immediately as user types
+                  requestAnimationFrame(() => {
+                    resizeTextarea();
+                  });
+                }}
                 onPaste={handlePaste}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
