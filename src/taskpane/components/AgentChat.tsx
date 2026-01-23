@@ -51,8 +51,6 @@ const useStyles = makeStyles({
     overflowY: "auto",
     overflowX: "hidden",
     padding: "20px 24px",
-    paddingBottom: "12px",
-    marginBottom: "1px",
     scrollbarWidth: "thin",
     scrollbarColor: "#30363d #0d1117",
     "&::-webkit-scrollbar": {
@@ -105,18 +103,15 @@ const useStyles = makeStyles({
   },
   inputContainer: {
     padding: "6px 10px",
-    paddingTop: "0px",
     borderTop: "1px solid #21262d",
     backgroundColor: "#0d1117",
     flexShrink: 0,
-    position: "relative",
-    zIndex: 2,
-    marginTop: "-1px",
   },
   inputRow: {
-    position: "relative",
     display: "flex",
-    alignItems: "center",
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: "6px",
   },
   textarea: {
     flex: 1,
@@ -129,11 +124,7 @@ const useStyles = makeStyles({
     border: "1px solid #30363d",
     borderRadius: "8px",
     padding: "6px 12px",
-    // Reserve a non-typable "toolbar lane" at the bottom
-    // NOTE: keep this >= toolbar height so caret/last lines never go under it
-    paddingBottom: "48px",
-    // Helps scroll positioning respect the toolbar lane
-    scrollPaddingBottom: "48px",
+    scrollbarGutter: "stable",
     position: "relative",
     resize: "none",
     overflowY: "auto",
@@ -168,21 +159,14 @@ const useStyles = makeStyles({
     },
   },
   buttonRow: {
-    position: "absolute",
-    bottom: "6px",
-    left: "6px",
-    // Leave room for the textarea scrollbar so it's always reachable
-    right: "34px",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    // Fully opaque bar so text never shows behind buttons
     backgroundColor: "#0d1117",
     borderRadius: "6px",
     padding: "2px 2px",
-    // Soft top fade so it feels “inside” without a hard divider
-    boxShadow: "0 -10px 16px rgba(13, 17, 23, 0.95)",
-    pointerEvents: "none",
+    border: "1px solid #21262d",
+    pointerEvents: "auto",
     zIndex: 10,
   },
   buttonRowLeft: {
