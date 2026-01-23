@@ -764,8 +764,8 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
   }, []);
 
   const articleHeaderRegex = /ARTICLE\s+[A-Z]-\d+/i;
-  const stepMarkerRegex = /^\s*(?:\.\d+|\d+\.|\d+\)|[-*•])\s+/;
-  const actionLineRegex = /^\s*(?:Add|Delete|Substitute|Replace|Insert|Remove|Change|Update|Modify)\b/i;
+  const instructionKeywordRegex = /\b(?:Add|Delete|Substitute|Substitue|Replace|Insert|Remove|Change|Update|Modify|Include)\b/i;
+  const instructionLineRegex = /^\s*(?:\.\d+|\d+\.|\d+\))?\s*(?:Add|Delete|Substitute|Substitue|Replace|Insert|Remove|Change|Update|Modify|Include)\b/i;
 
   const splitInstructions = (text: string): { steps: string[]; headerLine?: string } => {
     const normalized = text.replace(/\r\n/g, "\n");
@@ -787,10 +787,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
       return indices;
     };
 
-    let startIndices = findStartIndices(stepMarkerRegex);
-    if (startIndices.length < 2) {
-      startIndices = findStartIndices(actionLineRegex);
-    }
+    const startIndices = findStartIndices(instructionLineRegex);
 
     if (startIndices.length < 2) {
       return { steps: [text], headerLine };
@@ -811,7 +808,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
 
   const isArticleInstruction = (text: string): boolean => articleHeaderRegex.test(text);
   const isArticleEditInstruction = (text: string): boolean =>
-    isArticleInstruction(text) && /(?:Add|Delete|Substitute|Replace|Insert|Remove|Change|Update|Modify)\b/i.test(text);
+    isArticleInstruction(text) && instructionKeywordRegex.test(text);
 
   const updateChecklistStep = (messageId: string, stepId: string, updates: Partial<ChecklistStep>) => {
     setMessages(prev =>
