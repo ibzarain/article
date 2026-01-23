@@ -1088,6 +1088,7 @@ MANDATORY WORKFLOW - FOLLOW THIS EXACTLY:
 
 2. ALWAYS call readDocument with the specific text the user specified:
    - If user says "before 'The Construction Manager shall:'", search for "The Construction Manager shall" (with or without colon)
+   - If the user refers to numbered paragraphs like "1.2" or "1.3", search for "1.2 " or "1.3 " (with a trailing space) and prefer whole-number matches. Do NOT match sub-bullets like ".2" or ".3".
    - Review the readDocument results - you MUST see matches before proceeding
    - If no matches found, try variations: "Construction Manager shall", "The Construction Manager", etc.
    - DO NOT proceed to insert/edit until you've found the location via readDocument
@@ -1104,7 +1105,7 @@ MANDATORY WORKFLOW - FOLLOW THIS EXACTLY:
 
 5. NEVER insert at "beginning" or "end" unless the user explicitly asks for that. If user says "before X", you MUST find X first.
 
-6. Use ONE tool call at a time. Wait for the tool result before deciding the next action.
+6. Use ONE tool call at a time. Wait for the tool result before deciding the next action. NEVER reuse a prior location; always re-read before each edit.
 
 7. For insertText: location "before"/"after"/"inline" requires searchText from readDocument results.
 
