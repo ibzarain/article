@@ -124,26 +124,59 @@ async function findSemanticMatches(
   snippetStart: number;
   snippetEnd: number;
 }>> {
-  // Split article into semantic chunks (paragraphs or sentences)
+  // Split article into semantic chunks (prioritize numbered paragraphs, then regular paragraphs, then sentences)
   const chunks: Array<{ text: string; start: number; end: number }> = [];
-  const paragraphs = articleText.split(/\n\s*\n|\r\n\s*\r\n/);
-  let currentPos = 0;
   
-  for (const para of paragraphs) {
-    if (para.trim().length > 0) {
-      const start = currentPos;
-      const end = start + para.length;
-      chunks.push({ text: para.trim(), start, end });
-      currentPos = end + (articleText.substring(end).match(/^\s*\n/) || [''])[0].length;
-    } else {
-      currentPos += para.length + 1;
+  // First, try to split by numbered paragraphs (lines starting with "X.Y" where X and Y are digits)
+  const numberedParaPattern = /(^\d+\.\d+\s+[^\n]+(?:\n(?!\d+\.\d+)[^\n]+)*)/gm;
+  let match;
+  let lastEnd = 0;
+  
+  while ((match = numberedParaPattern.exec(articleText)) !== null) {
+    // Add any text before this match
+    if (match.index > lastEnd) {
+      const beforeText = articleText.substring(lastEnd, match.index).trim();
+      if (beforeText.length > 0) {
+        chunks.push({ text: beforeText, start: lastEnd, end: match.index });
+      }
+    }
+    
+    const paraText = match[0].trim();
+    if (paraText.length > 0) {
+      chunks.push({ text: paraText, start: match.index, end: match.index + match[0].length });
+    }
+    lastEnd = match.index + match[0].length;
+  }
+  
+  // Add remaining text
+  if (lastEnd < articleText.length) {
+    const remaining = articleText.substring(lastEnd).trim();
+    if (remaining.length > 0) {
+      chunks.push({ text: remaining, start: lastEnd, end: articleText.length });
     }
   }
   
-  // If no paragraphs, split by sentences
+  // If no numbered paragraphs found, split by regular paragraphs
+  if (chunks.length === 0) {
+    const paragraphs = articleText.split(/\n\s*\n|\r\n\s*\r\n/);
+    let currentPos = 0;
+    
+    for (const para of paragraphs) {
+      if (para.trim().length > 0) {
+        const start = currentPos;
+        const end = start + para.length;
+        chunks.push({ text: para.trim(), start, end });
+        currentPos = end + (articleText.substring(end).match(/^\s*\n/) || [''])[0].length;
+      } else {
+        currentPos += para.length + 1;
+      }
+    }
+  }
+  
+  // If still no chunks, split by sentences
   if (chunks.length === 0) {
     const sentences = articleText.split(/(?<=[.!?])\s+/);
-    currentPos = 0;
+    let currentPos = 0;
     for (const sent of sentences) {
       if (sent.trim().length > 10) {
         const start = currentPos;
@@ -159,10 +192,12 @@ async function findSemanticMatches(
   // Use AI to score each chunk's relevance to the query
   const scoringPrompt = `You are a text search assistant. Given a search query and a list of text chunks from a document, identify which chunks are semantically relevant to the query.
 
+IMPORTANT: If the query contains a numbered paragraph reference (like "1.2" or "1.3"), prioritize chunks that start with that exact number pattern. For example, if query is "1.2", look for chunks starting with "1.2 " or "1.2".
+
 Query: "${query}"
 
 Text chunks:
-${chunks.map((chunk, i) => `[${i}] ${chunk.text.substring(0, 200)}${chunk.text.length > 200 ? '...' : ''}`).join('\n\n')}
+${chunks.map((chunk, i) => `[${i}] ${chunk.text.substring(0, 300)}${chunk.text.length > 300 ? '...' : ''}`).join('\n\n')}
 
 Return a JSON array of chunk indices (0-based) that are semantically relevant to the query, ordered by relevance (most relevant first). Only include chunks that are actually relevant. Format: [0, 3, 5]`;
 
@@ -1194,11 +1229,11 @@ function createScopedEditTools(
       },
     },
     deleteText: {
-      description: 'Delete text from the article. Only works within the current article section.',
+      description: 'Delete text from the article. Only works within the current article section. Use this to delete paragraphs or text. If searchText is a paragraph number like "1.2", it will delete the entire paragraph starting with that number.',
       parameters: {
         type: 'object',
         properties: {
-          searchText: { type: 'string', description: 'The text to find and delete from the article' },
+          searchText: { type: 'string', description: 'The text to find and delete from the article. Can be a paragraph number (e.g., "1.2") or text from readDocument results.' },
           deleteAll: { type: 'boolean', description: 'If true, deletes all occurrences. If false, deletes only the first occurrence.' },
           matchCase: { type: 'boolean', description: 'Whether the search should be case-sensitive' },
           matchWholeWord: { type: 'boolean', description: 'Whether to match whole words only' },
@@ -1327,6 +1362,179 @@ function createScopedEditTools(
         }
       },
     },
+    substituteText: {
+      description: 'Delete existing text and insert new text in one operation. Use this when the instruction says "substitute" or "replace". This tool does both delete and insert atomically.',
+      parameters: {
+        type: 'object',
+        properties: {
+          searchText: { type: 'string', description: 'The text to find and delete. Use matchText from readDocument results.' },
+          newText: { type: 'string', description: 'The new text to insert in place of the deleted text. Preserve all newlines and formatting exactly as provided in the instruction.' },
+          matchCase: { type: 'boolean', description: 'Whether the search should be case-sensitive' },
+          matchWholeWord: { type: 'boolean', description: 'Whether to match whole words only' },
+        },
+        required: ['searchText', 'newText'],
+      },
+      execute: async ({ searchText, newText, matchCase, matchWholeWord }: any) => {
+        try {
+          ensureFreshRead('substituteText');
+          const warnings: string[] = [];
+          const labelOnly = isNumberedParagraphLabel(searchText);
+          const label = extractNumberedLabel(searchText);
+          const shouldMatchWholeWord = typeof matchWholeWord === 'boolean' ? matchWholeWord : labelOnly;
+
+          // Delete and insert in one Word.run call
+          const result = await Word.run(async (context) => {
+            const paragraphs = context.document.body.paragraphs;
+            context.load(paragraphs, 'items');
+            await context.sync();
+            const startParagraph = paragraphs.items[articleBoundaries.startParagraphIndex];
+            const endParagraph = paragraphs.items[articleBoundaries.endParagraphIndex];
+            const startRange = startParagraph.getRange('Start');
+            const endRange = endParagraph.getRange('End');
+            const articleRange = startRange.expandTo(endRange);
+
+            const searchResults = articleRange.search(searchText, {
+              matchCase: matchCase || false,
+              matchWholeWord: shouldMatchWholeWord,
+            });
+
+            context.load(searchResults, 'items');
+            await context.sync();
+
+            if (searchResults.items.length === 0) {
+              throw new Error(`Text "${searchText}" not found in article`);
+            }
+
+            let itemsToDelete = [searchResults.items[0]];
+            if (label) {
+              const filtered: Word.Range[] = [];
+              for (const item of searchResults.items) {
+                const paragraph = item.paragraphs.getFirst();
+                context.load(paragraph, 'text');
+                await context.sync();
+                if (paragraphStartsWithLabel(paragraph.text, label)) {
+                  filtered.push(item);
+                }
+              }
+              if (filtered.length === 0) {
+                throw new Error(`Paragraph "${label}" not found at paragraph start`);
+              }
+              itemsToDelete = [filtered[0]];
+            }
+
+            let deletedText = '';
+            let insertParagraph: Word.Paragraph | null = null;
+
+            for (const item of itemsToDelete) {
+              if (labelOnly) {
+                const paragraph = item.paragraphs.getFirst();
+                context.load(paragraph, 'text');
+                await context.sync();
+                deletedText = paragraph.text || '';
+                // Find paragraph index by searching through paragraphs
+                let paraIndex = -1;
+                for (let i = articleBoundaries.startParagraphIndex; i <= articleBoundaries.endParagraphIndex; i++) {
+                  if (paragraphs.items[i] === paragraph) {
+                    paraIndex = i;
+                    break;
+                  }
+                }
+                paragraph.delete();
+                await context.sync();
+                // Get the paragraph that's now at this position (or the one before)
+                if (paraIndex > articleBoundaries.startParagraphIndex) {
+                  insertParagraph = paragraphs.items[paraIndex - 1];
+                } else if (paraIndex < articleBoundaries.endParagraphIndex) {
+                  insertParagraph = paragraphs.items[paraIndex];
+                } else {
+                  insertParagraph = startParagraph;
+                }
+              } else {
+                context.load(item, 'text');
+                await context.sync();
+                deletedText = item.text;
+                // Get paragraph for insertion
+                insertParagraph = item.paragraphs.getFirst();
+                item.delete();
+                await context.sync();
+              }
+            }
+
+            // Insert new text
+            if (insertParagraph) {
+              context.load(insertParagraph, 'text');
+              await context.sync();
+              
+              if (newText.includes('\n')) {
+                // Multi-line: insert as paragraphs
+                const textLines = newText.split('\n');
+                let lastPara = insertParagraph;
+                for (let i = 0; i < textLines.length; i++) {
+                  const lineText = textLines[i];
+                  if (i === 0 && lineText.trim() === '' && textLines.length > 1) continue;
+                  if (i === textLines.length - 1 && lineText.trim() === '' && textLines.length > 1) continue;
+
+                  const newPara = lastPara.insertParagraph(lineText, Word.InsertLocation.after);
+                  context.load(newPara, ['style']);
+                  await context.sync();
+                  if (insertParagraph.style && insertParagraph.style !== 'Normal') {
+                    newPara.style = insertParagraph.style;
+                    await context.sync();
+                  }
+                  lastPara = newPara;
+                }
+              } else {
+                // Single line: insert as text after the paragraph
+                const paraRange = insertParagraph.getRange('End');
+                paraRange.insertText(newText, Word.InsertLocation.after);
+              }
+              await context.sync();
+            }
+
+            return { deletedText };
+          });
+
+          readState.hasFreshRead = false;
+
+          if (changeTracker) {
+            const changeObj: DocumentChange = {
+              type: 'edit',
+              description: `Substituted "${result.deletedText}" with "${newText}"`,
+              oldText: result.deletedText,
+              newText: newText,
+              searchText: searchText,
+              id: `change_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              timestamp: new Date(),
+              applied: false,
+              canUndo: true,
+            };
+
+            try {
+              await renderInlineDiff(changeObj);
+            } catch (e) {
+              warnings.push(`Substitution succeeded, but failed to render inline diff: ${e instanceof Error ? e.message : String(e)}`);
+            }
+
+            try {
+              await changeTracker(changeObj);
+            } catch (e) {
+              warnings.push(`Substitution succeeded, but failed to record change: ${e instanceof Error ? e.message : String(e)}`);
+            }
+          }
+
+          return {
+            success: true,
+            message: `Substituted "${searchText}" with new text`,
+            ...(warnings.length > 0 ? { warnings } : {}),
+          };
+        } catch (error) {
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error substituting text',
+          };
+        }
+      },
+    },
   };
 }
 
@@ -1391,10 +1599,11 @@ CRITICAL: PRESERVE FORMATTING - When extracting text from the user's instruction
 CRITICAL: INSTRUCTION-ONLY SEARCHES - You MUST ONLY search for content explicitly mentioned in the current instruction. Do NOT search for content from article previews, previous steps, or any other context. Every readDocument query MUST include content from the current instruction only.
 
 AVAILABLE TOOLS:
-- readDocument: SEARCH tool - Search ARTICLE ${articleName} for a query and return contextual snippets around each match. MANDATORY: Call this BEFORE any insert/edit/delete to find the exact location text (use matchText as searchText). CRITICAL: You can ONLY search for content explicitly mentioned in the current instruction. Wildcard queries ("*" or "all") are NOT allowed.
+- readDocument: SEARCH tool - Search ARTICLE ${articleName} using AI semantic search. MANDATORY: Call this BEFORE any insert/edit/delete to find the exact location text (use matchText as searchText). CRITICAL: You can ONLY search for content explicitly mentioned in the current instruction. Wildcard queries ("*" or "all") are NOT allowed.
 - editDocument: Find and replace text within ARTICLE ${articleName} only. Requires searchText from readDocument results.
 - insertText: Insert new text within ARTICLE ${articleName} only. MANDATORY: Requires searchText from readDocument results. If user says "before X", you MUST find X via readDocument first, then use that matchText as searchText with location: "before". IMPORTANT: When extracting the text to insert from the user's instruction, preserve ALL newlines (\\n) and formatting exactly as provided. The text parameter must include newline characters where the user has line breaks.
-- deleteText: Delete text from ARTICLE ${articleName} only. Requires searchText from readDocument results.
+- deleteText: Delete text from ARTICLE ${articleName} only. Requires searchText from readDocument results. If searchText is a paragraph number like "1.2", it will delete the entire paragraph.
+- substituteText: Delete existing text and insert new text in ONE operation. USE THIS when the instruction says "substitute" or "replace". This is the PREFERRED tool for substitution operations as it does both delete and insert atomically. Requires searchText from readDocument results and newText from the instruction.
 
 MANDATORY WORKFLOW - FOLLOW THIS EXACTLY:
 1. UNDERSTAND the user's instruction. Extract the specific content mentioned (numbered paragraphs, quoted text, key phrases).
@@ -1412,10 +1621,12 @@ MANDATORY WORKFLOW - FOLLOW THIS EXACTLY:
    - If one search fails, try the next strategy - DO NOT give up after one failed search
 
 3. Once readDocument returns matches:
-   - Use the EXACT matchText from the results as searchText for insertText/editDocument/deleteText
+   - Use the EXACT matchText from the results as searchText for the appropriate tool
    - If multiple matches, use the first one (or the one that makes sense in context)
-   - For "Delete and substitute" instructions: FIRST delete the existing paragraph, THEN insert the new content
-   - Call the appropriate tool with the matchText as searchText
+   - For "Delete and substitute" or "substitute" instructions: USE substituteText tool (it does both delete and insert in one operation)
+   - DO NOT just read and stop - you MUST call the appropriate tool (deleteText, insertText, editDocument, or substituteText)
+   - If instruction says "substitute", use substituteText tool with searchText from readDocument and newText from instruction
+   - Call the appropriate tool immediately after finding matches - DO NOT stop after reading
 
 4. CRITICAL: If readDocument doesn't find the text after trying multiple strategies:
    - Try searching for parts of the paragraph content (e.g., if looking for "1.2", try searching for words that appear after "1.2" in the document)
@@ -1433,9 +1644,14 @@ MANDATORY WORKFLOW - FOLLOW THIS EXACTLY:
 
 7. For insertText: location "before"/"after"/"inline" requires searchText from readDocument results.
 
-8. COMPLETION: You MUST complete ALL operations mentioned in the instruction. If the instruction says "Delete X and substitute Y", you MUST do both. Do not stop after one operation.
+8. COMPLETION: You MUST complete ALL operations mentioned in the instruction. 
+   - If the instruction says "substitute" or "replace", you MUST call substituteText tool (NOT just readDocument)
+   - If the instruction says "Delete X and substitute Y", you MUST call substituteText tool
+   - DO NOT just read and stop - you MUST actually execute the operations
+   - After calling readDocument and finding matches, you MUST immediately call the appropriate tool (deleteText, insertText, editDocument, or substituteText)
+   - Your job is to EXECUTE the instruction, not just read the document
 
-8. FINAL RESPONSE (KEEP IT MINIMAL):
+9. FINAL RESPONSE (KEEP IT MINIMAL):
    - Do NOT paste full article content.
    - Do NOT write a detailed summary or "Changes Made".
    - Respond with a single short sentence, e.g. "Done." or "Proposed changes below."
