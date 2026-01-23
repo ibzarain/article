@@ -615,8 +615,6 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
       return;
     }
 
-    // Grow naturally from 1 line up to 10 lines, then scroll.
-    const MAX_LINES = 10;
     const computed = window.getComputedStyle(textarea);
     const fontSize = parseFloat(computed.fontSize || "13");
     const rawLineHeight = computed.lineHeight || "";
@@ -632,9 +630,8 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
     const borderTop = parseFloat(computed.borderTopWidth || "0");
     const borderBottom = parseFloat(computed.borderBottomWidth || "0");
 
-    // Calculate single line height and max height
+    // Calculate single line height
     const singleLineHeight = lineHeight + paddingTop + paddingBottom + borderTop + borderBottom;
-    const maxHeightPx = lineHeight * MAX_LINES + paddingTop + paddingBottom + borderTop + borderBottom;
 
     // Save current height to detect if we need to recalculate
     const currentHeight = textarea.style.height;
@@ -648,12 +645,10 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
     
     const scrollHeight = textarea.scrollHeight;
     
-    // Set height to scrollHeight, but ensure minimum is singleLineHeight and max is maxHeightPx
-    const nextHeight = Math.max(singleLineHeight, Math.min(scrollHeight, maxHeightPx));
+    // Set height to scrollHeight, but ensure minimum is singleLineHeight
+    const nextHeight = Math.max(singleLineHeight, scrollHeight);
     textarea.style.height = `${nextHeight}px`;
-    
-    // Only show scrollbar when content exceeds max height
-    textarea.style.overflowY = scrollHeight > maxHeightPx ? "auto" : "hidden";
+    textarea.style.overflowY = "hidden";
   }, []);
 
   // Set up change tracking callback for the tools
