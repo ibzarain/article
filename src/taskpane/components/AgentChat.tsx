@@ -309,9 +309,9 @@ const useStyles = makeStyles({
     } as any,
   },
   sendButton: {
-    width: "20px",
-    height: "20px",
-    minWidth: "20px",
+    width: "24px",
+    height: "24px",
+    minWidth: "24px",
     backgroundColor: "#1f6feb",
     color: "#ffffff",
     border: "none",
@@ -966,15 +966,13 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                 <strong style={{ color: "#f0f6fc", fontSize: "18px", marginBottom: "12px", display: "block", fontWeight: "600" }}>
                   Amico Article
                 </strong>
-                Edit your Word document with natural language commands. Make changes, format text, and manage content efficiently.
                 <br />
                 <br />
                 <span style={{ color: "#8b949e", fontSize: "13px" }}>
                   <div style={{ marginTop: "8px" }}>
-                    • Make first paragraph bold<br />
-                    • Replace 'hello' with 'hi'<br />
-                    • Delete second sentence<br />
-                    • Insert text after paragraph 3
+                    • Ask me anything.<br />
+                    • The more detail, the better.<br />
+                    • It's faster than typing.<br />
                   </div>
                 </span>
               </div>
