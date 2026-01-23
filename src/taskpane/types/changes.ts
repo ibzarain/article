@@ -11,6 +11,18 @@ export interface DocumentChange {
   newText?: string;
   searchText?: string;
   location?: string;
+  /**
+   * Optional scoping hints to prevent diff rendering from matching the wrong place.
+   * When present, inline diff rendering + accept/reject should prefer these boundaries.
+   */
+  articleName?: string;
+  articleStartParagraphIndex?: number;
+  articleEndParagraphIndex?: number;
+  /**
+   * Absolute paragraph index in the document body for the intended target.
+   * When present, inline diff rendering should operate on that paragraph.
+   */
+  targetParagraphIndex?: number;
   formatChanges?: {
     bold?: boolean;
     italic?: boolean;

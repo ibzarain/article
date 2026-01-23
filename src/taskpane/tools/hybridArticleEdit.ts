@@ -519,7 +519,7 @@ function createScopedEditTools(
         },
         required: ['searchText', 'newText'],
       },
-      execute: async ({ searchText, newText, replaceAll, matchCase, matchWholeWord }: any) => {
+      execute: async ({ searchText, newText, matchCase, matchWholeWord }: any) => {
         try {
           ensureFreshRead('editDocument', searchText);
           const warnings: string[] = [];
@@ -527,14 +527,13 @@ function createScopedEditTools(
           const label = extractNumberedLabel(searchText);
           const shouldMatchWholeWord = typeof matchWholeWord === 'boolean' ? matchWholeWord : labelOnly;
 
-          // First, locate the target text within the article and capture the actual
-          // matched text. Do NOT call renderInlineDiff/changeTracker inside Word.run
-          // because renderInlineDiff uses Word.run internally (nested Word.run is unstable).
-          const result = await Word.run(async (context) => {
-            // Get article range
+          // Locate target text but DO NOT mutate the document yet.
+          // We render a proposed inline diff (red old + green new) and only finalize on Accept.
+          const located = await Word.run(async (context) => {
             const paragraphs = context.document.body.paragraphs;
             context.load(paragraphs, 'items');
             await context.sync();
+
             const startParagraph = paragraphs.items[articleBoundaries.startParagraphIndex];
             const endParagraph = paragraphs.items[articleBoundaries.endParagraphIndex];
             const startRange = startParagraph.getRange('Start');
@@ -542,31 +541,66 @@ function createScopedEditTools(
             const articleRange = startRange.expandTo(endRange);
 
             if (labelOnly && label) {
-              const found = await findParagraphByNumberLabel(context, paragraphs, label);
-              if (!found) {
+              // For numbered list items, locate by listItem.listString when available.
+              const startIdx = articleBoundaries.startParagraphIndex;
+              const endIdx = articleBoundaries.endParagraphIndex;
+              const slice = paragraphs.items.slice(startIdx, endIdx + 1);
+              for (const p of slice) {
+                context.load(p, 'text');
+                const listItem = (p as any).listItemOrNullObject ? (p as any).listItemOrNullObject : (p as any).listItem;
+                if (listItem) context.load(listItem, 'listString');
+              }
+              await context.sync();
+
+              let targetIndex: number | null = null;
+              let targetParagraph: Word.Paragraph | null = null;
+              let isListItem = false;
+
+              for (let i = startIdx; i <= endIdx; i++) {
+                const p = paragraphs.items[i];
+                const listItem = (p as any).listItemOrNullObject ? (p as any).listItemOrNullObject : (p as any).listItem;
+                const listString = listItem && !(listItem as any).isNullObject ? ((listItem as any).listString || '') : '';
+                if ((listString || '').trim() === label) {
+                  targetIndex = i;
+                  targetParagraph = p;
+                  isListItem = true;
+                  break;
+                }
+              }
+
+              if (!targetParagraph) {
+                // Fallback to literal label at paragraph start.
+                for (let i = startIdx; i <= endIdx; i++) {
+                  const p = paragraphs.items[i];
+                  const t = p.text || '';
+                  if (paragraphStartsWithLabel(t, label)) {
+                    targetIndex = i;
+                    targetParagraph = p;
+                    isListItem = false;
+                    break;
+                  }
+                }
+              }
+
+              if (!targetParagraph || targetIndex === null) {
                 throw new Error(`Paragraph "${label}" not found in ARTICLE ${articleName}`);
               }
-              context.load(found.paragraph, 'text');
-              await context.sync();
 
-              const actualOldText = found.paragraph.text || '';
-              const replacement = found.isListItem ? stripLeadingLabel(label, newText) : newText;
-              found.paragraph.insertText(replacement, Word.InsertLocation.replace);
-              await context.sync();
+              const actualOldText = targetParagraph.text || '';
+              const normalizedNewText = isListItem ? stripLeadingLabel(label, newText) : newText;
 
               return {
-                replaced: 1,
-                totalFound: 1,
-                capturedOldTexts: [actualOldText],
+                oldText: actualOldText,
+                newText: normalizedNewText,
+                targetParagraphIndex: targetIndex,
               };
             }
 
-            // Search only within the article range
+            // General edit: find within article range
             const searchResults = articleRange.search(searchText, {
               matchCase: matchCase || false,
               matchWholeWord: shouldMatchWholeWord,
             });
-
             context.load(searchResults, 'items');
             await context.sync();
 
@@ -574,94 +608,51 @@ function createScopedEditTools(
               throw new Error(`Text "${searchText}" not found in article`);
             }
 
-            let itemsToReplace = replaceAll ? searchResults.items : [searchResults.items[0]];
-            if (label) {
-              const filtered: Word.Range[] = [];
-              for (const item of searchResults.items) {
-                const paragraph = item.paragraphs.getFirst();
-                context.load(paragraph, 'text');
-                await context.sync();
-                if (paragraphStartsWithLabel(paragraph.text, label)) {
-                  filtered.push(item);
-                }
-              }
-              if (filtered.length === 0) {
-                throw new Error(`Paragraph "${label}" not found at paragraph start`);
-              }
-              itemsToReplace = replaceAll ? filtered : [filtered[0]];
-            }
-            let replacementCount = 0;
-            const capturedOldTexts: string[] = [];
-
-            for (const item of itemsToReplace) {
-              if (labelOnly) {
-                // labelOnly handled above. Keep as safety.
-                const paragraph = item.paragraphs.getFirst();
-                context.load(paragraph, 'text');
-                await context.sync();
-                const paragraphText = paragraph.text || '';
-                const actualOldText = paragraphText;
-                paragraph.insertText(newText, Word.InsertLocation.replace);
-                replacementCount++;
-                capturedOldTexts.push(actualOldText);
-              } else {
-                context.load(item, 'text');
-                await context.sync();
-                const actualOldText = item.text;
-                item.insertText(newText, Word.InsertLocation.replace);
-                replacementCount++;
-                capturedOldTexts.push(actualOldText);
-              }
-            }
-
+            const target = searchResults.items[0];
+            context.load(target, 'text');
             await context.sync();
 
             return {
-              replaced: replacementCount,
-              totalFound: searchResults.items.length,
-              capturedOldTexts,
+              oldText: target.text,
+              newText: newText,
+              targetParagraphIndex: undefined as number | undefined,
             };
           });
 
-          // Second, render the inline diff + record the change OUTSIDE Word.run (best-effort).
+          const changeObj: DocumentChange = {
+            type: 'edit',
+            description: `Replaced "${located.oldText}" with "${located.newText}"`,
+            oldText: located.oldText,
+            newText: located.newText,
+            // IMPORTANT: use oldText as the searchText so the inline diff targets the full existing content.
+            searchText: located.oldText,
+            id: `change_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            timestamp: new Date(),
+            applied: false,
+            canUndo: true,
+            articleName: articleName,
+            articleStartParagraphIndex: articleBoundaries.startParagraphIndex,
+            articleEndParagraphIndex: articleBoundaries.endParagraphIndex,
+            ...(typeof located.targetParagraphIndex === 'number'
+              ? { targetParagraphIndex: located.targetParagraphIndex }
+              : {}),
+          };
+
+          try {
+            await renderInlineDiff(changeObj);
+          } catch (e) {
+            warnings.push(
+              `Failed to render inline diff: ${e instanceof Error ? e.message : String(e)}`
+            );
+          }
+
           if (changeTracker) {
-            const oldTexts = Array.isArray((result as any).capturedOldTexts)
-              ? ((result as any).capturedOldTexts as string[])
-              : [];
-
-            // Keep behavior similar to before: render a diff per targeted occurrence.
-            // Note: renderInlineDiff currently searches by `searchText` and uses the first match,
-            // so replaceAll may still behave unexpectedly in documents with repeated matches.
-            for (const oldText of oldTexts.length > 0 ? oldTexts : [searchText]) {
-              const changeObj: DocumentChange = {
-                type: 'edit',
-                description: `Replaced "${oldText}" with "${newText}"`,
-                oldText: oldText,
-                newText: newText,
-                searchText: searchText,
-                id: `change_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                timestamp: new Date(),
-                applied: false,
-                canUndo: true,
-              };
-
-              try {
-                await renderInlineDiff(changeObj);
-              } catch (e) {
-                warnings.push(
-                  `Edit succeeded, but failed to render inline diff: ${e instanceof Error ? e.message : String(e)
-                  }`
-                );
-              }
-
-              try {
-                await changeTracker(changeObj);
-              } catch (e) {
-                warnings.push(
-                  `Edit succeeded, but failed to record change: ${e instanceof Error ? e.message : String(e)
-                  }`
-                );
-              }
+            try {
+              await changeTracker(changeObj);
+            } catch (e) {
+              warnings.push(
+                `Failed to record change: ${e instanceof Error ? e.message : String(e)}`
+              );
             }
           }
 
@@ -669,9 +660,9 @@ function createScopedEditTools(
 
           return {
             success: true,
-            replaced: result.replaced,
-            totalFound: result.totalFound,
-            message: `Replaced ${result.replaced} occurrence(s) of "${searchText}" with "${newText}"`,
+            replaced: 1,
+            totalFound: 1,
+            message: `Proposed replacement for "${searchText}"`,
             ...(warnings.length > 0 ? { warnings } : {}),
           };
         } catch (error) {
@@ -1315,17 +1306,18 @@ function createScopedEditTools(
         },
         required: ['searchText'],
       },
-      execute: async ({ searchText, deleteAll, matchCase, matchWholeWord }: any) => {
+      execute: async ({ searchText, matchCase, matchWholeWord }: any) => {
         try {
           ensureFreshRead('deleteText', searchText);
           const labelOnly = isNumberedParagraphLabel(searchText);
           const label = extractNumberedLabel(searchText);
           const shouldMatchWholeWord = typeof matchWholeWord === 'boolean' ? matchWholeWord : labelOnly;
-          const result = await Word.run(async (context) => {
-            // Get article range
+          // Locate target text but DO NOT delete yet. We only mark it red/strikethrough as a proposal.
+          const located = await Word.run(async (context) => {
             const paragraphs = context.document.body.paragraphs;
             context.load(paragraphs, 'items');
             await context.sync();
+
             const startParagraph = paragraphs.items[articleBoundaries.startParagraphIndex];
             const endParagraph = paragraphs.items[articleBoundaries.endParagraphIndex];
             const startRange = startParagraph.getRange('Start');
@@ -1333,130 +1325,95 @@ function createScopedEditTools(
             const articleRange = startRange.expandTo(endRange);
 
             if (labelOnly && label) {
-              const found = await findParagraphByNumberLabel(context, paragraphs, label);
-              if (!found) {
-                throw new Error(`Paragraph "${label}" not found in ARTICLE ${articleName}`);
+              const startIdx = articleBoundaries.startParagraphIndex;
+              const endIdx = articleBoundaries.endParagraphIndex;
+              const slice = paragraphs.items.slice(startIdx, endIdx + 1);
+              for (const p of slice) {
+                context.load(p, 'text');
+                const listItem = (p as any).listItemOrNullObject ? (p as any).listItemOrNullObject : (p as any).listItem;
+                if (listItem) context.load(listItem, 'listString');
               }
-              context.load(found.paragraph, 'text');
-              await context.sync();
-              const deletedText = found.paragraph.text || '';
-              found.paragraph.delete();
               await context.sync();
 
+              let targetIndex: number | null = null;
+              let targetParagraph: Word.Paragraph | null = null;
+
+              for (let i = startIdx; i <= endIdx; i++) {
+                const p = paragraphs.items[i];
+                const listItem = (p as any).listItemOrNullObject ? (p as any).listItemOrNullObject : (p as any).listItem;
+                const listString = listItem && !(listItem as any).isNullObject ? ((listItem as any).listString || '') : '';
+                if ((listString || '').trim() === label) {
+                  targetIndex = i;
+                  targetParagraph = p;
+                  break;
+                }
+              }
+
+              if (!targetParagraph) {
+                for (let i = startIdx; i <= endIdx; i++) {
+                  const p = paragraphs.items[i];
+                  const t = p.text || '';
+                  if (paragraphStartsWithLabel(t, label)) {
+                    targetIndex = i;
+                    targetParagraph = p;
+                    break;
+                  }
+                }
+              }
+
+              if (!targetParagraph || targetIndex === null) {
+                throw new Error(`Paragraph "${label}" not found in ARTICLE ${articleName}`);
+              }
+
               return {
-                deleted: 1,
-                totalFound: 1,
-                deletedText,
+                oldText: targetParagraph.text || '',
+                targetParagraphIndex: targetIndex,
               };
             }
 
-            // Search only within article range
             const searchResults = articleRange.search(searchText, {
               matchCase: matchCase || false,
               matchWholeWord: shouldMatchWholeWord,
             });
-
             context.load(searchResults, 'items');
             await context.sync();
-
             if (searchResults.items.length === 0) {
               throw new Error(`Text "${searchText}" not found in article`);
             }
-
-            let itemsToDelete = deleteAll ? searchResults.items : [searchResults.items[0]];
-            if (label) {
-              const filtered: Word.Range[] = [];
-              for (const item of searchResults.items) {
-                const paragraph = item.paragraphs.getFirst();
-                context.load(paragraph, 'text');
-                await context.sync();
-                if (paragraphStartsWithLabel(paragraph.text, label)) {
-                  filtered.push(item);
-                }
-              }
-              if (filtered.length === 0) {
-                throw new Error(`Paragraph "${label}" not found at paragraph start`);
-              }
-              itemsToDelete = deleteAll ? filtered : [filtered[0]];
-            }
-            let deletionCount = 0;
-
-            for (const item of itemsToDelete) {
-              if (labelOnly) {
-                const paragraph = item.paragraphs.getFirst();
-                context.load(paragraph, 'text');
-                await context.sync();
-                const deletedText = paragraph.text || '';
-                paragraph.delete();
-                deletionCount++;
-
-                if (changeTracker) {
-                  const changeObj: DocumentChange = {
-                    type: 'delete',
-                    description: `Deleted "${deletedText}"`,
-                    oldText: deletedText,
-                    searchText: searchText,
-                    id: `change_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                    timestamp: new Date(),
-                    applied: false,
-                    canUndo: true,
-                  };
-
-                  await renderInlineDiff(changeObj);
-                  await changeTracker(changeObj);
-                }
-              } else {
-                context.load(item, 'text');
-                await context.sync();
-                const deletedText = item.text;
-
-                item.delete();
-                deletionCount++;
-
-                if (changeTracker) {
-                  const changeObj: DocumentChange = {
-                    type: 'delete',
-                    description: `Deleted "${deletedText}"`,
-                    oldText: deletedText,
-                    searchText: searchText,
-                    id: `change_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                    timestamp: new Date(),
-                    applied: false,
-                    canUndo: true,
-                  };
-
-                  await renderInlineDiff(changeObj);
-                  await changeTracker(changeObj);
-                }
-              }
-            }
-
+            const target = searchResults.items[0];
+            context.load(target, 'text');
             await context.sync();
 
             return {
-              deleted: deletionCount,
-              totalFound: searchResults.items.length,
+              oldText: target.text,
+              targetParagraphIndex: undefined as number | undefined,
             };
           });
 
-          // If labelOnly, record change using the captured deletedText when possible.
-          if (labelOnly && changeTracker && (result as any).deletedText) {
-            const deletedText = (result as any).deletedText as string;
-            const changeObj: DocumentChange = {
-              type: 'delete',
-              description: `Deleted "${deletedText}"`,
-              oldText: deletedText,
-              searchText: searchText,
-              id: `change_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-              timestamp: new Date(),
-              applied: false,
-              canUndo: true,
-            };
-            try {
-              await renderInlineDiff(changeObj);
-            } catch {
-              // best-effort
-            }
+          const changeObj: DocumentChange = {
+            type: 'delete',
+            description: `Deleted "${located.oldText}"`,
+            oldText: located.oldText,
+            // IMPORTANT: use oldText as searchText so the inline diff marks the actual content.
+            searchText: located.oldText,
+            id: `change_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            timestamp: new Date(),
+            applied: false,
+            canUndo: true,
+            articleName: articleName,
+            articleStartParagraphIndex: articleBoundaries.startParagraphIndex,
+            articleEndParagraphIndex: articleBoundaries.endParagraphIndex,
+            ...(typeof located.targetParagraphIndex === 'number'
+              ? { targetParagraphIndex: located.targetParagraphIndex }
+              : {}),
+          };
+
+          try {
+            await renderInlineDiff(changeObj);
+          } catch (e) {
+            // best-effort
+          }
+          if (changeTracker) {
             try {
               await changeTracker(changeObj);
             } catch {
@@ -1468,9 +1425,9 @@ function createScopedEditTools(
 
           return {
             success: true,
-            deleted: result.deleted,
-            totalFound: result.totalFound,
-            message: `Deleted ${result.deleted} occurrence(s) of "${searchText}"`,
+            deleted: 1,
+            totalFound: 1,
+            message: `Proposed deletion for "${searchText}"`,
           };
         } catch (error) {
           return {
@@ -1567,7 +1524,10 @@ MANDATORY WORKFLOW - FOLLOW THIS EXACTLY:
 3. Once readDocument returns matches:
    - Use the EXACT matchText from the results as searchText for insertText/editDocument/deleteText
    - If multiple matches, use the first one (or the one that makes sense in context)
-   - For "Delete and substitute" instructions: FIRST delete the existing paragraph, THEN insert the new content
+   - For "Delete and substitute" instructions involving numbered paragraphs like "1.2" / "1.3":
+     - Prefer using editDocument with searchText set to the numbered label (e.g., "1.2") and newText set to the replacement content.
+     - This will render an inline red/green replacement in the SAME numbered list item (not as a separate inserted paragraph).
+     - Only use deleteText + insertText if the instruction explicitly says to insert a brand new paragraph elsewhere.
    - Call the appropriate tool with the matchText as searchText
 
 4. CRITICAL: If readDocument doesn't find the text after trying multiple strategies:

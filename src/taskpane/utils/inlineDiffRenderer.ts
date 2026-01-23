@@ -1,6 +1,51 @@
 /* global Word */
 import { DocumentChange } from '../types/changes';
 
+async function resolveScopedSearchRoot(context: Word.RequestContext, change: DocumentChange): Promise<Word.Range | Word.Paragraph> {
+  const paragraphs = context.document.body.paragraphs;
+  context.load(paragraphs, 'items');
+  await context.sync();
+
+  // Strongest: explicit paragraph index
+  if (typeof change.targetParagraphIndex === 'number' && change.targetParagraphIndex >= 0) {
+    const p = paragraphs.items[change.targetParagraphIndex];
+    if (p) {
+      return p;
+    }
+  }
+
+  // Next: article boundary indices
+  if (
+    typeof change.articleStartParagraphIndex === 'number' &&
+    typeof change.articleEndParagraphIndex === 'number' &&
+    change.articleStartParagraphIndex >= 0 &&
+    change.articleEndParagraphIndex >= change.articleStartParagraphIndex
+  ) {
+    const start = paragraphs.items[change.articleStartParagraphIndex];
+    const end = paragraphs.items[change.articleEndParagraphIndex];
+    if (start && end) {
+      const startRange = start.getRange('Start');
+      const endRange = end.getRange('End');
+      return startRange.expandTo(endRange);
+    }
+  }
+
+  // Fallback: whole body
+  return context.document.body.getRange('Whole');
+}
+
+async function scopedSearch(
+  context: Word.RequestContext,
+  root: Word.Range | Word.Paragraph,
+  text: string
+): Promise<Word.RangeCollection> {
+  const range = (root as any).getRange ? (root as Word.Paragraph).getRange('Whole') : (root as Word.Range);
+  const results = range.search(text, { matchCase: false, matchWholeWord: false });
+  context.load(results, 'items');
+  await context.sync();
+  return results;
+}
+
 /**
  * Renders an inline diff in the Word document showing old text (strikethrough/red) 
  * and new text (green) with accept/undo buttons
@@ -9,14 +54,8 @@ export async function renderInlineDiff(change: DocumentChange): Promise<void> {
   try {
     await Word.run(async (context) => {
       if (change.type === 'edit' && change.searchText && change.oldText && change.newText) {
-        // Find the text to replace
-        const searchResults = context.document.body.search(change.searchText, {
-          matchCase: false,
-          matchWholeWord: false,
-        });
-        
-        context.load(searchResults, 'items');
-        await context.sync();
+        const root = await resolveScopedSearchRoot(context, change);
+        const searchResults = await scopedSearch(context, root, change.searchText);
         
         if (searchResults.items.length === 0) {
           console.warn(`Text "${change.searchText}" not found for inline diff`);
@@ -43,8 +82,9 @@ export async function renderInlineDiff(change: DocumentChange): Promise<void> {
         range.font.color = '#f48771'; // Red color
         await context.sync();
         
-        // Insert new text after old text with green highlighting
-        const newRange = range.insertText(` ${newTextDisplay}`, Word.InsertLocation.after);
+        // Insert new text after old text with green highlighting.
+        // Use a newline separator so replacement is clearly visible.
+        const newRange = range.insertText(`\n${newTextDisplay}`, Word.InsertLocation.after);
         await context.sync();
         
         // Apply green color to new text
@@ -110,13 +150,8 @@ export async function renderInlineDiff(change: DocumentChange): Promise<void> {
         
       } else if (change.type === 'delete' && change.oldText) {
         // For deletions, show old text with strikethrough and red
-        const searchResults = context.document.body.search(change.searchText || change.oldText, {
-          matchCase: false,
-          matchWholeWord: false,
-        });
-        
-        context.load(searchResults, 'items');
-        await context.sync();
+        const root = await resolveScopedSearchRoot(context, change);
+        const searchResults = await scopedSearch(context, root, change.searchText || change.oldText);
         
         if (searchResults.items.length === 0) {
           console.warn(`Text not found for deletion diff`);
@@ -153,14 +188,10 @@ export async function acceptInlineChange(change: DocumentChange): Promise<void> 
   try {
     await Word.run(async (context) => {
       if (change.type === 'edit' && change.newText && change.oldText) {
+        const root = await resolveScopedSearchRoot(context, change);
         // Find the new text (green highlighted) and old text (strikethrough red)
         // Search for new text with green highlighting
-        const newTextResults = context.document.body.search(change.newText, {
-          matchCase: false,
-          matchWholeWord: false,
-        });
-        context.load(newTextResults, 'items');
-        await context.sync();
+        const newTextResults = await scopedSearch(context, root, change.newText);
         
         // Find and accept the new text (remove green highlighting)
         for (const range of newTextResults.items) {
@@ -177,12 +208,7 @@ export async function acceptInlineChange(change: DocumentChange): Promise<void> 
         }
         
         // Find and remove old text (strikethrough red)
-        const oldTextResults = context.document.body.search(change.oldText, {
-          matchCase: false,
-          matchWholeWord: false,
-        });
-        context.load(oldTextResults, 'items');
-        await context.sync();
+        const oldTextResults = await scopedSearch(context, root, change.oldText);
         
         for (const range of oldTextResults.items) {
           context.load(range, ['text', 'font']);
@@ -198,13 +224,9 @@ export async function acceptInlineChange(change: DocumentChange): Promise<void> 
         }
         
       } else if (change.type === 'insert' && change.newText) {
+        const root = await resolveScopedSearchRoot(context, change);
         // Find the inserted text (green highlighted) and remove highlighting
-        const searchResults = context.document.body.search(change.newText, {
-          matchCase: false,
-          matchWholeWord: false,
-        });
-        context.load(searchResults, 'items');
-        await context.sync();
+        const searchResults = await scopedSearch(context, root, change.newText);
         
         for (const range of searchResults.items) {
           context.load(range, ['text', 'font']);
@@ -220,13 +242,9 @@ export async function acceptInlineChange(change: DocumentChange): Promise<void> 
         }
         
       } else if (change.type === 'delete' && change.oldText) {
+        const root = await resolveScopedSearchRoot(context, change);
         // Find and remove the deleted text (strikethrough red)
-        const searchResults = context.document.body.search(change.oldText, {
-          matchCase: false,
-          matchWholeWord: false,
-        });
-        context.load(searchResults, 'items');
-        await context.sync();
+        const searchResults = await scopedSearch(context, root, change.oldText);
         
         for (const range of searchResults.items) {
           context.load(range, ['text', 'font']);
@@ -255,14 +273,10 @@ export async function rejectInlineChange(change: DocumentChange): Promise<void> 
   try {
     await Word.run(async (context) => {
       if (change.type === 'edit' && change.oldText && change.newText) {
+        const root = await resolveScopedSearchRoot(context, change);
         // Remove new text (green highlighted), restore old text (remove strikethrough)
         // First, find and remove the new text
-        const newTextResults = context.document.body.search(change.newText, {
-          matchCase: false,
-          matchWholeWord: false,
-        });
-        context.load(newTextResults, 'items');
-        await context.sync();
+        const newTextResults = await scopedSearch(context, root, change.newText);
         
         for (const range of newTextResults.items) {
           context.load(range, ['text', 'font']);
@@ -278,12 +292,7 @@ export async function rejectInlineChange(change: DocumentChange): Promise<void> 
         }
         
         // Then, restore the old text (remove strikethrough and red)
-        const oldTextResults = context.document.body.search(change.oldText, {
-          matchCase: false,
-          matchWholeWord: false,
-        });
-        context.load(oldTextResults, 'items');
-        await context.sync();
+        const oldTextResults = await scopedSearch(context, root, change.oldText);
         
         for (const range of oldTextResults.items) {
           context.load(range, ['text', 'font']);
@@ -300,13 +309,9 @@ export async function rejectInlineChange(change: DocumentChange): Promise<void> 
         }
         
       } else if (change.type === 'insert' && change.newText) {
+        const root = await resolveScopedSearchRoot(context, change);
         // Remove the inserted text
-        const searchResults = context.document.body.search(change.newText, {
-          matchCase: false,
-          matchWholeWord: false,
-        });
-        context.load(searchResults, 'items');
-        await context.sync();
+        const searchResults = await scopedSearch(context, root, change.newText);
         
         for (const range of searchResults.items) {
           context.load(range, ['text', 'font']);
@@ -322,13 +327,9 @@ export async function rejectInlineChange(change: DocumentChange): Promise<void> 
         }
         
       } else if (change.type === 'delete' && change.oldText) {
+        const root = await resolveScopedSearchRoot(context, change);
         // Restore the deleted text (remove strikethrough and red)
-        const searchResults = context.document.body.search(change.oldText, {
-          matchCase: false,
-          matchWholeWord: false,
-        });
-        context.load(searchResults, 'items');
-        await context.sync();
+        const searchResults = await scopedSearch(context, root, change.oldText);
         
         for (const range of searchResults.items) {
           context.load(range, ['text', 'font']);
