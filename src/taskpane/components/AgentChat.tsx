@@ -102,7 +102,7 @@ const useStyles = makeStyles({
     borderBottomLeftRadius: "4px",
   },
   inputContainer: {
-    padding: "6px 10px",
+    padding: "10px 10px 6px 10px",
     borderTop: "1px solid #21262d",
     backgroundColor: "#0d1117",
     flexShrink: 0,
@@ -120,7 +120,7 @@ const useStyles = makeStyles({
     backgroundColor: "#0d1117",
     border: "1px solid #30363d",
     borderRadius: "8px",
-    padding: "6px",
+    padding: "4px 4px 6px 4px",
     "&:focus-within": {
       borderColor: "#1f6feb",
       boxShadow: "0 0 0 3px rgba(31, 111, 235, 0.1)",
@@ -128,15 +128,13 @@ const useStyles = makeStyles({
   },
   textarea: {
     flex: 1,
-    minHeight: "0px",
-    maxHeight: "220px",
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
     fontSize: "13px",
     backgroundColor: "transparent",
     color: "#c9d1d9",
     border: "none",
     borderRadius: "6px",
-    padding: "6px 8px",
+    padding: "4px 6px",
     scrollbarGutter: "stable",
     position: "relative",
     resize: "none",
@@ -641,7 +639,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
       return;
     }
 
-    // Grow from 1 line up to 10 lines, then scroll.
+    // Grow naturally from 1 line up to 10 lines, then scroll.
     const MAX_LINES = 10;
     const computed = window.getComputedStyle(textarea);
     const fontSize = parseFloat(computed.fontSize || "13");
@@ -655,13 +653,20 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
     const borderTop = parseFloat(computed.borderTopWidth || "0");
     const borderBottom = parseFloat(computed.borderBottomWidth || "0");
 
-    const maxHeightPx =
-      lineHeight * MAX_LINES + paddingTop + paddingBottom + borderTop + borderBottom;
+    // Calculate single line height and max height
+    const singleLineHeight = lineHeight + paddingTop + paddingBottom + borderTop + borderBottom;
+    const maxHeightPx = lineHeight * MAX_LINES + paddingTop + paddingBottom + borderTop + borderBottom;
 
+    // Reset height to auto to get natural scrollHeight
     textarea.style.height = "auto";
-    const nextHeight = Math.min(textarea.scrollHeight, maxHeightPx);
+    const scrollHeight = textarea.scrollHeight;
+    
+    // Set height to scrollHeight, but cap at maxHeightPx
+    const nextHeight = Math.max(singleLineHeight, Math.min(scrollHeight, maxHeightPx));
     textarea.style.height = `${nextHeight}px`;
-    textarea.style.overflowY = textarea.scrollHeight > maxHeightPx ? "auto" : "hidden";
+    
+    // Only show scrollbar when content exceeds max height
+    textarea.style.overflowY = scrollHeight > maxHeightPx ? "auto" : "hidden";
   }, []);
 
   // Set up change tracking callback for the tools
@@ -686,10 +691,15 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
     scrollToBottom();
   }, [messages]);
 
-  // Auto-resize textarea
+  // Initialize and auto-resize textarea
   useEffect(() => {
     resizeTextarea();
-  }, [input]);
+  }, [input, resizeTextarea]);
+
+  // Initialize textarea height on mount
+  useEffect(() => {
+    resizeTextarea();
+  }, [resizeTextarea]);
 
   // Handle paste events to preserve formatting
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -725,11 +735,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
     setError(null);
     setIsLoading(true);
 
-    // Reset textarea height
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-      textareaRef.current.style.overflowY = "hidden";
-    }
+    // Reset textarea height (will be handled by resizeTextarea when input changes)
 
     // Clear changes for this new message
     currentMessageChangesRef.current = [];
