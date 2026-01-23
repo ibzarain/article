@@ -1,11 +1,11 @@
 import * as React from "react";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import {
   tokens,
   makeStyles,
   Spinner,
 } from "@fluentui/react-components";
-import { DocumentRegular, CheckmarkCircleFilled, DismissCircleFilled, ArrowUpRegular, EditRegular, ChatRegular, ChevronDownRegular } from "@fluentui/react-icons";
+import { DocumentRegular, CheckmarkCircleFilled, DismissCircleFilled, ArrowUpRegular, EditRegular, ChatRegular, ChevronDownRegular, WeatherSunnyRegular, WeatherMoonRegular } from "@fluentui/react-icons";
 import { generateAgentResponse } from "../agent/wordAgent";
 import { createChangeTracker } from "../utils/changeTracker";
 import { DocumentChange, ChangeTracking } from "../types/changes";
@@ -25,21 +25,21 @@ interface Message {
   messageId?: string;
 }
 
-const useStyles = makeStyles({
+const createStyles = (isLight: boolean): any => ({
   container: {
     display: "flex",
     flexDirection: "column",
     width: "100%",
     height: "100%",
-    backgroundColor: "#0d1117",
-    color: "#c9d1d9",
+    backgroundColor: isLight ? "#ffffff" : "#0d1117",
+    color: isLight ? "#24292f" : "#c9d1d9",
     overflow: "hidden",
   },
   chatPanel: {
     flex: 1,
     display: "flex",
     flexDirection: "column",
-    backgroundColor: "#0d1117",
+    backgroundColor: isLight ? "#ffffff" : "#0d1117",
     height: "100%",
     overflow: "hidden",
   },
@@ -52,18 +52,18 @@ const useStyles = makeStyles({
     overflowX: "hidden",
     padding: "20px 24px",
     scrollbarWidth: "thin",
-    scrollbarColor: "#30363d #0d1117",
+    scrollbarColor: isLight ? "#d0d7de #ffffff" : "#30363d #0d1117",
     "&::-webkit-scrollbar": {
       width: "10px",
     },
     "&::-webkit-scrollbar-track": {
-      background: "#0d1117",
+      background: isLight ? "#ffffff" : "#0d1117",
     },
     "&::-webkit-scrollbar-thumb": {
-      background: "#30363d",
+      background: isLight ? "#d0d7de" : "#30363d",
       borderRadius: "5px",
       "&:hover": {
-        background: "#484f58",
+        background: isLight ? "#b1bac4" : "#484f58",
       },
     },
   },
@@ -96,15 +96,15 @@ const useStyles = makeStyles({
     borderBottomRightRadius: "4px",
   },
   assistantBubble: {
-    backgroundColor: "#161b22",
-    color: "#c9d1d9",
-    border: "1px solid #30363d",
+    backgroundColor: isLight ? "#f6f8fa" : "#161b22",
+    color: isLight ? "#24292f" : "#c9d1d9",
+    border: isLight ? "1px solid #d0d7de" : "1px solid #30363d",
     borderBottomLeftRadius: "4px",
   },
   inputContainer: {
     padding: "10px 10px 6px 10px",
-    borderTop: "1px solid #21262d",
-    backgroundColor: "#0d1117",
+    borderTop: isLight ? "1px solid #d0d7de" : "1px solid #21262d",
+    backgroundColor: isLight ? "#ffffff" : "#0d1117",
     flexShrink: 0,
   },
   inputRow: {
@@ -117,20 +117,20 @@ const useStyles = makeStyles({
     display: "flex",
     flexDirection: "column",
     gap: "6px",
-    backgroundColor: "#0d1117",
-    border: "1px solid #30363d",
+    backgroundColor: isLight ? "#ffffff" : "#0d1117",
+    border: isLight ? "1px solid #d0d7de" : "1px solid #30363d",
     borderRadius: "8px",
     padding: "4px 4px 6px 4px",
     "&:focus-within": {
       borderColor: "#1f6feb",
-      boxShadow: "0 0 0 3px rgba(31, 111, 235, 0.1)",
+      boxShadow: isLight ? "0 0 0 3px rgba(31, 111, 235, 0.15)" : "0 0 0 3px rgba(31, 111, 235, 0.1)",
     } as any,
   },
   textarea: {
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
     fontSize: "13px",
     backgroundColor: "transparent",
-    color: "#c9d1d9",
+    color: isLight ? "#24292f" : "#c9d1d9",
     border: "none",
     borderRadius: "6px",
     padding: "4px 4px",
@@ -145,27 +145,27 @@ const useStyles = makeStyles({
     textDecoration: "none",
     textDecorationLine: "none",
     scrollbarWidth: "thin",
-    scrollbarColor: "#30363d #0d1117",
+    scrollbarColor: isLight ? "#d0d7de #ffffff" : "#30363d #0d1117",
     minHeight: "24px",
     boxSizing: "border-box",
     "&::-webkit-scrollbar": {
       width: "8px",
     },
     "&::-webkit-scrollbar-track": {
-      background: "#0d1117",
+      background: isLight ? "#ffffff" : "#0d1117",
     },
     "&::-webkit-scrollbar-thumb": {
-      background: "#30363d",
+      background: isLight ? "#d0d7de" : "#30363d",
       borderRadius: "6px",
       "&:hover": {
-        background: "#484f58",
+        background: isLight ? "#b1bac4" : "#484f58",
       },
     },
     "&:focus": {
       outline: "none",
     } as any,
     "&::placeholder": {
-      color: "#6e7681",
+      color: isLight ? "#656d76" : "#6e7681",
     },
   },
   buttonRow: {
@@ -196,30 +196,30 @@ const useStyles = makeStyles({
     alignItems: "center",
     height: "24px",
     borderRadius: "6px",
-    backgroundColor: "#21262d",
-    border: "1px solid #30363d",
-    color: "#c9d1d9",
+    backgroundColor: isLight ? "#f6f8fa" : "#21262d",
+    border: isLight ? "1px solid #d0d7de" : "1px solid #30363d",
+    color: isLight ? "#24292f" : "#c9d1d9",
     pointerEvents: "auto",
     userSelect: "none",
     "&:hover": {
-      backgroundColor: "#30363d",
+      backgroundColor: isLight ? "#e7ecf0" : "#30363d",
     } as any,
     "&:focus-within": {
       borderColor: "#1f6feb",
-      boxShadow: "0 0 0 2px rgba(31, 111, 235, 0.15)",
+      boxShadow: isLight ? "0 0 0 2px rgba(31, 111, 235, 0.2)" : "0 0 0 2px rgba(31, 111, 235, 0.15)",
     } as any,
   },
   modeSelectIcon: {
     display: "flex",
     alignItems: "center",
-    color: "#c9d1d9",
+    color: isLight ? "#24292f" : "#c9d1d9",
     opacity: 0.9,
     pointerEvents: "none",
   },
   modeSelectButton: {
     appearance: "none",
     backgroundColor: "transparent",
-    color: "#c9d1d9",
+    color: isLight ? "#24292f" : "#c9d1d9",
     border: "none",
     fontSize: "10px",
     fontWeight: 700,
@@ -238,7 +238,7 @@ const useStyles = makeStyles({
   modeSelectChevron: {
     display: "flex",
     alignItems: "center",
-    color: "#8b949e",
+    color: isLight ? "#656d76" : "#8b949e",
     opacity: 0.95,
     pointerEvents: "none",
   },
@@ -247,10 +247,10 @@ const useStyles = makeStyles({
     left: 0,
     bottom: "calc(100% + 6px)",
     minWidth: "100px",
-    backgroundColor: "#161b22",
-    border: "1px solid #30363d",
+    backgroundColor: isLight ? "#ffffff" : "#161b22",
+    border: isLight ? "1px solid #d0d7de" : "1px solid #30363d",
     borderRadius: "6px",
-    boxShadow: "0 10px 28px rgba(0,0,0,0.45)",
+    boxShadow: isLight ? "0 10px 28px rgba(0,0,0,0.15)" : "0 10px 28px rgba(0,0,0,0.45)",
     padding: "4px",
     zIndex: 50,
   },
@@ -263,17 +263,17 @@ const useStyles = makeStyles({
     borderRadius: "4px",
     border: "none",
     backgroundColor: "transparent",
-    color: "#c9d1d9",
+    color: isLight ? "#24292f" : "#c9d1d9",
     cursor: "pointer",
     fontSize: "12px",
     fontWeight: 600,
     textAlign: "left",
     "&:hover": {
-      backgroundColor: "#21262d",
+      backgroundColor: isLight ? "#f6f8fa" : "#21262d",
     } as any,
     "&:focus": {
       outline: "none",
-      backgroundColor: "#21262d",
+      backgroundColor: isLight ? "#f6f8fa" : "#21262d",
     } as any,
   },
   modeMenuItemActive: {
@@ -335,52 +335,68 @@ const useStyles = makeStyles({
     "&:disabled": {
       opacity: 0.4,
       cursor: "not-allowed",
-      backgroundColor: "#30363d",
+      backgroundColor: isLight ? "#d0d7de" : "#30363d",
+    },
+  },
+  themeToggleButton: {
+    width: "24px",
+    height: "24px",
+    minWidth: "24px",
+    backgroundColor: "transparent",
+    color: isLight ? "#24292f" : "#c9d1d9",
+    border: "none",
+    borderRadius: "4px",
+    fontSize: "12px",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    transition: "all 0.15s ease",
+    pointerEvents: "auto",
+    padding: 0,
+    "&:hover": {
+      backgroundColor: isLight ? "#f6f8fa" : "#21262d",
+    },
+    "&:active": {
+      transform: "scale(0.95)",
     },
   },
   bulkButton: {
     padding: "3px 6px",
-    fontSize: "9px",
+    fontSize: "10px",
     borderRadius: "4px",
-    border: "1px solid rgba(46, 160, 67, 0.35)",
-    backgroundColor: "rgba(46, 160, 67, 0.18)",
+    border: "none",
+    backgroundColor: "#1e4620",
     color: "#89d185",
     cursor: "pointer",
     fontWeight: "500",
-    transition: "background 0.15s ease",
+    transition: "all 0.15s ease",
     whiteSpace: "nowrap",
-    height: "20px",
+    height: "24px",
     display: "flex",
     alignItems: "center",
+    gap: "3px",
     pointerEvents: "auto",
     "&:hover:not(:disabled)": {
-      backgroundColor: "rgba(46, 160, 67, 0.26)",
-    } as any,
-    "&:active:not(:disabled)": {
-      backgroundColor: "rgba(46, 160, 67, 0.32)",
-    } as any,
+      backgroundColor: "#2d5a2f",
+    },
     "&:disabled": {
       opacity: 0.5,
       cursor: "not-allowed",
-      backgroundColor: "#30363d",
     },
   },
   bulkButtonReject: {
-    border: "1px solid rgba(248, 81, 73, 0.35)",
-    backgroundColor: "rgba(248, 81, 73, 0.18)",
+    backgroundColor: "#5a1d1d",
     color: "#f48771",
     "&:hover:not(:disabled)": {
-      backgroundColor: "rgba(248, 81, 73, 0.26)",
-    } as any,
-    "&:active:not(:disabled)": {
-      backgroundColor: "rgba(248, 81, 73, 0.32)",
+      backgroundColor: "#6a2d2d",
     } as any,
   },
   thinking: {
     display: "flex",
     alignItems: "center",
     gap: "8px",
-    color: "#8b949e",
+    color: isLight ? "#656d76" : "#8b949e",
     fontSize: "12px",
     fontStyle: "normal",
     padding: "8px 16px",
@@ -392,7 +408,7 @@ const useStyles = makeStyles({
     justifyContent: "center",
     gap: "20px",
     padding: "60px 40px",
-    color: "#8b949e",
+    color: isLight ? "#656d76" : "#8b949e",
     textAlign: "center",
   },
   emptyStateIcon: {
@@ -406,18 +422,18 @@ const useStyles = makeStyles({
     maxWidth: "400px",
   },
   changeBlock: {
-    border: "1px solid #30363d",
+    border: isLight ? "1px solid #d0d7de" : "1px solid #30363d",
     borderRadius: "8px",
     overflow: "hidden",
-    backgroundColor: "#161b22",
+    backgroundColor: isLight ? "#f6f8fa" : "#161b22",
   },
   changeHeader: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     padding: "6px 10px",
-    backgroundColor: "#1c2128",
-    borderBottom: "1px solid #30363d",
+    backgroundColor: isLight ? "#ffffff" : "#1c2128",
+    borderBottom: isLight ? "1px solid #d0d7de" : "1px solid #30363d",
     fontSize: "11px",
   },
   changeHeaderLeft: {
@@ -433,7 +449,7 @@ const useStyles = makeStyles({
   },
   changeHeaderSecondary: {
     fontSize: "11px",
-    color: "#8b949e",
+    color: isLight ? "#656d76" : "#8b949e",
     marginTop: "2px",
     whiteSpace: "nowrap",
     overflow: "hidden",
@@ -445,7 +461,7 @@ const useStyles = makeStyles({
     borderRadius: "999px",
     fontSize: "10px",
     fontWeight: 600,
-    border: "1px solid #30363d",
+    border: isLight ? "1px solid #d0d7de" : "1px solid #30363d",
   },
   acceptedPill: {
     backgroundColor: "#1e4620",
@@ -553,7 +569,7 @@ const useStyles = makeStyles({
   },
   changeDescription: {
     fontSize: "12px",
-    color: "#8b949e",
+    color: isLight ? "#656d76" : "#8b949e",
     marginTop: "4px",
   },
   changesContainer: {
@@ -564,7 +580,25 @@ const useStyles = makeStyles({
   },
 });
 
+const useStyles = (isLight: boolean) => {
+  return makeStyles(createStyles(isLight) as any);
+};
+
 const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
+  // Detect system theme preference
+  const getInitialTheme = (): boolean => {
+    const stored = localStorage.getItem("amico_article_theme");
+    if (stored !== null) {
+      return stored === "light";
+    }
+    // Check system preference
+    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) {
+      return true;
+    }
+    return false;
+  };
+
+  const [isLightTheme, setIsLightTheme] = useState<boolean>(getInitialTheme);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -579,7 +613,13 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
   const [processingChanges, setProcessingChanges] = useState<Set<string>>(new Set());
   const [bulkIsProcessing, setBulkIsProcessing] = useState<boolean>(false);
   const messageIdCounter = useRef<number>(0);
-  const styles = useStyles();
+  const styles = useMemo(() => useStyles(isLightTheme)(), [isLightTheme]);
+
+  const toggleTheme = () => {
+    const newTheme = !isLightTheme;
+    setIsLightTheme(newTheme);
+    localStorage.setItem("amico_article_theme", newTheme ? "light" : "dark");
+  };
 
   useEffect(() => {
     if (!modeMenuOpen) {
@@ -963,12 +1003,12 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
             <div className={styles.emptyState}>
               <DocumentRegular className={styles.emptyStateIcon} />
               <div className={styles.emptyStateText}>
-                <strong style={{ color: "#f0f6fc", fontSize: "18px", marginBottom: "12px", display: "block", fontWeight: "600" }}>
+                <strong style={{ color: isLightTheme ? "#24292f" : "#f0f6fc", fontSize: "18px", marginBottom: "12px", display: "block", fontWeight: "600" }}>
                   Amico Article
                 </strong>
                 <br />
                 <br />
-                <span style={{ color: "#8b949e", fontSize: "13px" }}>
+                <span style={{ color: isLightTheme ? "#656d76" : "#8b949e", fontSize: "13px" }}>
                   <div style={{ marginTop: "8px" }}>
                     • Ask me anything.<br />
                     • The more detail, the better.<br />
@@ -1115,9 +1155,9 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
         {error && (
           <div style={{
             padding: "12px 24px",
-            backgroundColor: "#3a1f1f",
-            color: "#f48771",
-            borderTop: "1px solid #5a2f2f",
+            backgroundColor: isLightTheme ? "#fff1f2" : "#3a1f1f",
+            color: isLightTheme ? "#cf222e" : "#f48771",
+            borderTop: isLightTheme ? "1px solid #ff8182" : "1px solid #5a2f2f",
             fontSize: "13px"
           }}>
             {error}
@@ -1156,6 +1196,19 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
               />
               <div className={styles.buttonRow}>
                 <div className={styles.buttonRowLeft}>
+                  <button
+                    type="button"
+                    className={styles.themeToggleButton}
+                    onClick={toggleTheme}
+                    title={isLightTheme ? "Switch to dark theme" : "Switch to light theme"}
+                    aria-label={isLightTheme ? "Switch to dark theme" : "Switch to light theme"}
+                  >
+                    {isLightTheme ? (
+                      <WeatherMoonRegular style={{ fontSize: "14px" }} />
+                    ) : (
+                      <WeatherSunnyRegular style={{ fontSize: "14px" }} />
+                    )}
+                  </button>
                   <div className={styles.modeSelectWrap} ref={modeMenuRef} title="Mode">
                     <button
                       type="button"
@@ -1187,7 +1240,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                             setModeMenuOpen(false);
                           }}
                         >
-                          <EditRegular style={{ fontSize: "12px", color: "#c9d1d9" }} />
+                          <EditRegular style={{ fontSize: "12px", color: isLightTheme ? "#24292f" : "#c9d1d9" }} />
                           <span>Edit</span>
                         </button>
 
@@ -1199,7 +1252,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                             setModeMenuOpen(false);
                           }}
                         >
-                          <ChatRegular style={{ fontSize: "12px", color: "#c9d1d9" }} />
+                          <ChatRegular style={{ fontSize: "12px", color: isLightTheme ? "#24292f" : "#c9d1d9" }} />
                           <span>Ask</span>
                         </button>
                       </div>
@@ -1216,7 +1269,14 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                         disabled={bulkIsProcessing || isLoading}
                         title="Accept all pending changes"
                       >
-                        Accept all ({pendingChangeCount})
+                        {bulkIsProcessing ? (
+                          <Spinner size="tiny" />
+                        ) : (
+                          <>
+                            <CheckmarkCircleFilled style={{ fontSize: "12px" }} />
+                            Accept all ({pendingChangeCount})
+                          </>
+                        )}
                       </button>
                       <button
                         className={`${styles.bulkButton} ${styles.bulkButtonReject}`}
@@ -1225,7 +1285,14 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                         disabled={bulkIsProcessing || isLoading}
                         title="Reject all pending changes"
                       >
-                        Reject all
+                        {bulkIsProcessing ? (
+                          <Spinner size="tiny" />
+                        ) : (
+                          <>
+                            <DismissCircleFilled style={{ fontSize: "12px" }} />
+                            Reject all
+                          </>
+                        )}
                       </button>
                     </>
                   )}
