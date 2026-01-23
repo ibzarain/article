@@ -351,11 +351,11 @@ const createStyles = (isLight: boolean): any => ({
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    transition: "all 0.15s ease",
+    transition: "color 0.15s ease",
     pointerEvents: "auto",
     padding: 0,
     "&:hover": {
-      backgroundColor: isLight ? "#f6f8fa" : "#21262d",
+      color: "#fbbf24",
     },
     "&:active": {
       transform: "scale(0.95)",
@@ -728,7 +728,12 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
   // Handle paste events to preserve formatting
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     e.preventDefault();
-    const pastedText = e.clipboardData.getData('text/plain');
+    // Some Office/Edge webviews can return undefined here; always coerce to string.
+    const pastedText =
+      (e.clipboardData?.getData("text/plain") ??
+        // Fallback for older clipboard APIs (Office/IE legacy)
+        (window as any)?.clipboardData?.getData("Text") ??
+        "") + "";
 
     // Insert the pasted text at the cursor position, preserving formatting
     const textarea = e.currentTarget;
@@ -1258,6 +1263,19 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                       </div>
                     )}
                   </div>
+                  <button
+                    type="button"
+                    className={styles.themeToggleButton}
+                    onClick={toggleTheme}
+                    title={isLightTheme ? "Switch to dark theme" : "Switch to light theme"}
+                    aria-label={isLightTheme ? "Switch to dark theme" : "Switch to light theme"}
+                  >
+                    {isLightTheme ? (
+                      <WeatherMoonRegular style={{ fontSize: "14px" }} />
+                    ) : (
+                      <WeatherSunnyRegular style={{ fontSize: "14px" }} />
+                    )}
+                  </button>
                 </div>
                 <div className={styles.buttonRowRight}>
                   {pendingChangeCount > 0 && (
