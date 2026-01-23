@@ -214,6 +214,17 @@ function createScopedReadDocumentTool(articleBoundaries: ArticleBoundaries) {
  * Creates scoped editing tools that only work within article boundaries
  */
 function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName: string) {
+  const normalizeLeadingWhitespace = (value: string) => value.replace(/^\s+/, '');
+  const isNumberedParagraphLabel = (value: string) => /^\s*\d+\.\d+\s*$/.test(value);
+  const extractNumberedLabel = (value: string) => {
+    const match = value.match(/\d+\.\d+/);
+    return match ? match[0] : '';
+  };
+  const paragraphStartsWithLabel = (paragraphText: string, label: string) => {
+    const normalizedParagraph = normalizeLeadingWhitespace(paragraphText || '');
+    return normalizedParagraph.startsWith(`${label} `) || normalizedParagraph === label;
+  };
+
   return {
     editDocument: {
       description: 'Edit or replace text in the article. Automatically preserves all formatting. Only edits within the current article section.',
@@ -231,6 +242,9 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
       execute: async ({ searchText, newText, replaceAll, matchCase, matchWholeWord }: any) => {
         try {
           const warnings: string[] = [];
+          const labelOnly = isNumberedParagraphLabel(searchText);
+          const label = extractNumberedLabel(searchText);
+          const shouldMatchWholeWord = typeof matchWholeWord === 'boolean' ? matchWholeWord : labelOnly;
 
           // First, locate the target text within the article and capture the actual
           // matched text. Do NOT call renderInlineDiff/changeTracker inside Word.run
@@ -249,7 +263,7 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
             // Search only within the article range
             const searchResults = articleRange.search(searchText, {
               matchCase: matchCase || false,
-              matchWholeWord: matchWholeWord || false,
+              matchWholeWord: shouldMatchWholeWord,
             });
 
             context.load(searchResults, 'items');
@@ -259,17 +273,43 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
               throw new Error(`Text "${searchText}" not found in article`);
             }
 
-            const itemsToReplace = replaceAll ? searchResults.items : [searchResults.items[0]];
+            let itemsToReplace = replaceAll ? searchResults.items : [searchResults.items[0]];
+            if (label) {
+              const filtered: Word.Range[] = [];
+              for (const item of searchResults.items) {
+                const paragraph = item.paragraphs.getFirst();
+                context.load(paragraph, 'text');
+                await context.sync();
+                if (paragraphStartsWithLabel(paragraph.text, label)) {
+                  filtered.push(item);
+                }
+              }
+              if (filtered.length === 0) {
+                throw new Error(`Paragraph "${label}" not found at paragraph start`);
+              }
+              itemsToReplace = replaceAll ? filtered : [filtered[0]];
+            }
             let replacementCount = 0;
             const capturedOldTexts: string[] = [];
 
             for (const item of itemsToReplace) {
-              context.load(item, 'text');
-              await context.sync();
-              const actualOldText = item.text;
-
-              replacementCount++;
-              capturedOldTexts.push(actualOldText);
+              if (labelOnly) {
+                const paragraph = item.paragraphs.getFirst();
+                context.load(paragraph, 'text');
+                await context.sync();
+                const paragraphText = paragraph.text || '';
+                const actualOldText = paragraphText;
+                paragraph.insertText(newText, Word.InsertLocation.replace);
+                replacementCount++;
+                capturedOldTexts.push(actualOldText);
+              } else {
+                context.load(item, 'text');
+                await context.sync();
+                const actualOldText = item.text;
+                item.insertText(newText, Word.InsertLocation.replace);
+                replacementCount++;
+                capturedOldTexts.push(actualOldText);
+              }
             }
 
             await context.sync();
@@ -356,6 +396,8 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
       execute: async ({ text, location, searchText }: any) => {
         try {
           const warnings: string[] = [];
+          const labelOnly = searchText ? isNumberedParagraphLabel(searchText) : false;
+          const label = searchText ? extractNumberedLabel(searchText) : '';
 
           const result = await Word.run(async (context) => {
             // Get article range
@@ -397,78 +439,61 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
               };
 
               const normalizedSearch = normalizeSearchText(searchText);
-              let searchResults = articleRange.search(normalizedSearch, {
-                matchCase: false,
-                matchWholeWord: false,
-              });
+              let searchResults: Word.RangeCollection;
+              const searchAttempts: string[] = [];
 
-              context.load(searchResults, 'items');
-              await context.sync();
-
-              const searchAttempts: string[] = [normalizedSearch];
-
-              // If not found, try original (might have different whitespace)
-              if (searchResults.items.length === 0 && searchText !== normalizedSearch) {
-                searchAttempts.push(searchText);
-                searchResults = articleRange.search(searchText, {
+              if (labelOnly && label) {
+                searchAttempts.push(label);
+                searchResults = articleRange.search(label, {
                   matchCase: false,
-                  matchWholeWord: false,
+                  matchWholeWord: true,
                 });
                 context.load(searchResults, 'items');
                 await context.sync();
-              }
 
-              // If not found, try with different whitespace handling
-              if (searchResults.items.length === 0) {
-                const trimmedSearch = normalizedSearch.trim();
-                if (trimmedSearch !== normalizedSearch) {
-                  searchAttempts.push(trimmedSearch);
-                  searchResults = articleRange.search(trimmedSearch, {
+                if (searchResults.items.length > 0) {
+                  const filtered: Word.Range[] = [];
+                  for (const item of searchResults.items) {
+                    const paragraph = item.paragraphs.getFirst();
+                    context.load(paragraph, 'text');
+                    await context.sync();
+                    if (paragraphStartsWithLabel(paragraph.text, label)) {
+                      filtered.push(item);
+                    }
+                  }
+                  if (filtered.length === 0) {
+                    searchResults = { items: [] } as Word.RangeCollection;
+                  } else {
+                    (searchResults as any).items = filtered;
+                  }
+                }
+              } else {
+                searchAttempts.push(normalizedSearch);
+                searchResults = articleRange.search(normalizedSearch, {
+                  matchCase: false,
+                  matchWholeWord: false,
+                });
+
+                context.load(searchResults, 'items');
+                await context.sync();
+
+                // If not found, try original (might have different whitespace)
+                if (searchResults.items.length === 0 && searchText !== normalizedSearch) {
+                  searchAttempts.push(searchText);
+                  searchResults = articleRange.search(searchText, {
                     matchCase: false,
                     matchWholeWord: false,
                   });
                   context.load(searchResults, 'items');
                   await context.sync();
                 }
-              }
 
-              // Try without punctuation at the end
-              if (searchResults.items.length === 0 && normalizedSearch && /[.:;]/.test(normalizedSearch)) {
-                const withoutPunct = normalizedSearch.replace(/[.:;]+$/, '').trim();
-                if (withoutPunct && withoutPunct !== normalizedSearch && !searchAttempts.includes(withoutPunct)) {
-                  searchAttempts.push(withoutPunct);
-                  searchResults = articleRange.search(withoutPunct, {
-                    matchCase: false,
-                    matchWholeWord: false,
-                  });
-                  context.load(searchResults, 'items');
-                  await context.sync();
-                }
-              }
-
-              // Try with punctuation added if original didn't have it
-              if (searchResults.items.length === 0 && normalizedSearch && !/[.:;]$/.test(normalizedSearch)) {
-                const withPunct = normalizedSearch + ':';
-                if (!searchAttempts.includes(withPunct)) {
-                  searchAttempts.push(withPunct);
-                  searchResults = articleRange.search(withPunct, {
-                    matchCase: false,
-                    matchWholeWord: false,
-                  });
-                  context.load(searchResults, 'items');
-                  await context.sync();
-                }
-              }
-
-              // Try partial match - just the key words if it's a phrase
-              if (searchResults.items.length === 0 && normalizedSearch) {
-                const words = normalizedSearch.trim().split(/\s+/);
-                if (words.length > 2) {
-                  // Try last 2-3 words (e.g., "Construction Manager shall" from "The Construction Manager shall:")
-                  const partialSearch = words.slice(-3).join(' ');
-                  if (partialSearch && !searchAttempts.includes(partialSearch)) {
-                    searchAttempts.push(partialSearch);
-                    searchResults = articleRange.search(partialSearch, {
+                // If not found, try with different whitespace handling
+                if (searchResults.items.length === 0) {
+                  const trimmedSearch = normalizedSearch.trim();
+                  if (trimmedSearch !== normalizedSearch) {
+                    searchAttempts.push(trimmedSearch);
+                    searchResults = articleRange.search(trimmedSearch, {
                       matchCase: false,
                       matchWholeWord: false,
                     });
@@ -476,23 +501,72 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
                     await context.sync();
                   }
                 }
-                // Also try first few words if it's a longer phrase
-                if (searchResults.items.length === 0 && words.length > 3) {
-                  const firstWords = words.slice(0, 3).join(' ');
-                  if (firstWords && !searchAttempts.includes(firstWords)) {
-                    searchAttempts.push(firstWords);
-                    searchResults = articleRange.search(firstWords, {
+
+                // Try without punctuation at the end
+                if (searchResults.items.length === 0 && normalizedSearch && /[.:;]/.test(normalizedSearch)) {
+                  const withoutPunct = normalizedSearch.replace(/[.:;]+$/, '').trim();
+                  if (withoutPunct && withoutPunct !== normalizedSearch && !searchAttempts.includes(withoutPunct)) {
+                    searchAttempts.push(withoutPunct);
+                    searchResults = articleRange.search(withoutPunct, {
                       matchCase: false,
                       matchWholeWord: false,
                     });
                     context.load(searchResults, 'items');
                     await context.sync();
+                  }
+                }
+
+                // Try with punctuation added if original didn't have it
+                if (searchResults.items.length === 0 && normalizedSearch && !/[.:;]$/.test(normalizedSearch)) {
+                  const withPunct = normalizedSearch + ':';
+                  if (!searchAttempts.includes(withPunct)) {
+                    searchAttempts.push(withPunct);
+                    searchResults = articleRange.search(withPunct, {
+                      matchCase: false,
+                      matchWholeWord: false,
+                    });
+                    context.load(searchResults, 'items');
+                    await context.sync();
+                  }
+                }
+
+                // Try partial match - just the key words if it's a phrase
+                if (searchResults.items.length === 0 && normalizedSearch) {
+                  const words = normalizedSearch.trim().split(/\s+/);
+                  if (words.length > 2) {
+                    // Try last 2-3 words (e.g., "Construction Manager shall" from "The Construction Manager shall:")
+                    const partialSearch = words.slice(-3).join(' ');
+                    if (partialSearch && !searchAttempts.includes(partialSearch)) {
+                      searchAttempts.push(partialSearch);
+                      searchResults = articleRange.search(partialSearch, {
+                        matchCase: false,
+                        matchWholeWord: false,
+                      });
+                      context.load(searchResults, 'items');
+                      await context.sync();
+                    }
+                  }
+                  // Also try first few words if it's a longer phrase
+                  if (searchResults.items.length === 0 && words.length > 3) {
+                    const firstWords = words.slice(0, 3).join(' ');
+                    if (firstWords && !searchAttempts.includes(firstWords)) {
+                      searchAttempts.push(firstWords);
+                      searchResults = articleRange.search(firstWords, {
+                        matchCase: false,
+                        matchWholeWord: false,
+                      });
+                      context.load(searchResults, 'items');
+                      await context.sync();
+                    }
                   }
                 }
               }
 
               // Fallback: search paragraph by paragraph if range search fails
               if (searchResults.items.length === 0) {
+                if (labelOnly) {
+                  throw new Error(`Paragraph "${label}" not found at paragraph start`);
+                }
                 // Get all paragraphs in the article
                 const articleParagraphs: Word.Paragraph[] = [];
                 for (let i = articleBoundaries.startParagraphIndex; i <= articleBoundaries.endParagraphIndex; i++) {
@@ -589,12 +663,14 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
               }
               await context.sync();
 
-              const normalizedNeedle = normalizeSearchText(searchText).toLowerCase();
-              for (const para of articleParagraphs) {
-                const normalizedHaystack = normalizeSearchText(para.text || '').toLowerCase();
-                if (normalizedHaystack.includes(normalizedNeedle)) {
-                  fallbackParagraph = para;
-                  break;
+              if (!labelOnly) {
+                const normalizedNeedle = normalizeSearchText(searchText).toLowerCase();
+                for (const para of articleParagraphs) {
+                  const normalizedHaystack = normalizeSearchText(para.text || '').toLowerCase();
+                  if (normalizedHaystack.includes(normalizedNeedle)) {
+                    fallbackParagraph = para;
+                    break;
+                  }
                 }
               }
 
@@ -934,6 +1010,9 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
       },
       execute: async ({ searchText, deleteAll, matchCase, matchWholeWord }: any) => {
         try {
+          const labelOnly = isNumberedParagraphLabel(searchText);
+          const label = extractNumberedLabel(searchText);
+          const shouldMatchWholeWord = typeof matchWholeWord === 'boolean' ? matchWholeWord : labelOnly;
           const result = await Word.run(async (context) => {
             // Get article range
             const paragraphs = context.document.body.paragraphs;
@@ -948,7 +1027,7 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
             // Search only within article range
             const searchResults = articleRange.search(searchText, {
               matchCase: matchCase || false,
-              matchWholeWord: matchWholeWord || false,
+              matchWholeWord: shouldMatchWholeWord,
             });
 
             context.load(searchResults, 'items');
@@ -958,34 +1037,71 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
               throw new Error(`Text "${searchText}" not found in article`);
             }
 
-            const itemsToDelete = deleteAll ? searchResults.items : [searchResults.items[0]];
+            let itemsToDelete = deleteAll ? searchResults.items : [searchResults.items[0]];
+            if (label) {
+              const filtered: Word.Range[] = [];
+              for (const item of searchResults.items) {
+                const paragraph = item.paragraphs.getFirst();
+                context.load(paragraph, 'text');
+                await context.sync();
+                if (paragraphStartsWithLabel(paragraph.text, label)) {
+                  filtered.push(item);
+                }
+              }
+              if (filtered.length === 0) {
+                throw new Error(`Paragraph "${label}" not found at paragraph start`);
+              }
+              itemsToDelete = deleteAll ? filtered : [filtered[0]];
+            }
             let deletionCount = 0;
 
             for (const item of itemsToDelete) {
-              context.load(item, 'text');
-              await context.sync();
-              const deletedText = item.text;
+              if (labelOnly) {
+                const paragraph = item.paragraphs.getFirst();
+                context.load(paragraph, 'text');
+                await context.sync();
+                const deletedText = paragraph.text || '';
+                paragraph.delete();
+                deletionCount++;
 
-              deletionCount++;
+                if (changeTracker) {
+                  const changeObj: DocumentChange = {
+                    type: 'delete',
+                    description: `Deleted "${deletedText}"`,
+                    oldText: deletedText,
+                    searchText: searchText,
+                    id: `change_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                    timestamp: new Date(),
+                    applied: false,
+                    canUndo: true,
+                  };
 
-              // Track the change (renderInlineDiff will handle the visual diff)
-              if (changeTracker) {
-                const changeObj: DocumentChange = {
-                  type: 'delete',
-                  description: `Deleted "${deletedText}"`,
-                  oldText: deletedText,
-                  searchText: searchText,
-                  id: `change_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                  timestamp: new Date(),
-                  applied: false,
-                  canUndo: true,
-                };
+                  await renderInlineDiff(changeObj);
+                  await changeTracker(changeObj);
+                }
+              } else {
+                context.load(item, 'text');
+                await context.sync();
+                const deletedText = item.text;
 
-                // Render inline diff (this will show deleted text with strikethrough/red)
-                await renderInlineDiff(changeObj);
+                item.delete();
+                deletionCount++;
 
-                // Track the change
-                await changeTracker(changeObj);
+                if (changeTracker) {
+                  const changeObj: DocumentChange = {
+                    type: 'delete',
+                    description: `Deleted "${deletedText}"`,
+                    oldText: deletedText,
+                    searchText: searchText,
+                    id: `change_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                    timestamp: new Date(),
+                    applied: false,
+                    canUndo: true,
+                  };
+
+                  await renderInlineDiff(changeObj);
+                  await changeTracker(changeObj);
+                }
               }
             }
 
@@ -1089,6 +1205,7 @@ MANDATORY WORKFLOW - FOLLOW THIS EXACTLY:
 2. ALWAYS call readDocument with the specific text the user specified:
    - If user says "before 'The Construction Manager shall:'", search for "The Construction Manager shall" (with or without colon)
    - If the user refers to numbered paragraphs like "1.2" or "1.3", search for "1.2 " or "1.3 " (with a trailing space) and prefer whole-number matches. Do NOT match sub-bullets like ".2" or ".3".
+   - If the numbered label search fails, use readDocument to capture the full paragraph lead-in (e.g., "1.2 except as expressly provided...") and use that longer lead-in as searchText.
    - Review the readDocument results - you MUST see matches before proceeding
    - If no matches found, try variations: "Construction Manager shall", "The Construction Manager", etc.
    - DO NOT proceed to insert/edit until you've found the location via readDocument
