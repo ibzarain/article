@@ -5,7 +5,7 @@ import {
   makeStyles,
   Spinner,
 } from "@fluentui/react-components";
-import { SparkleFilled, CheckmarkCircleFilled, DismissCircleFilled, ArrowUpRegular, EditRegular, ChatRegular } from "@fluentui/react-icons";
+import { SparkleFilled, CheckmarkCircleFilled, DismissCircleFilled, ArrowUpRegular, EditRegular, ChatRegular, ChevronDownRegular } from "@fluentui/react-icons";
 import { generateAgentResponse } from "../agent/wordAgent";
 import { createChangeTracker } from "../utils/changeTracker";
 import { DocumentChange, ChangeTracking } from "../types/changes";
@@ -128,8 +128,8 @@ const useStyles = makeStyles({
   },
   textarea: {
     flex: 1,
-    minHeight: "40px",
-    maxHeight: "200px",
+    minHeight: "0px",
+    maxHeight: "220px",
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
     fontSize: "13px",
     backgroundColor: "transparent",
@@ -192,16 +192,26 @@ const useStyles = makeStyles({
     pointerEvents: "auto",
   },
   modeSelectWrap: {
+    position: "relative",
     display: "flex",
     alignItems: "center",
     gap: "6px",
-    padding: "0 4px",
+    padding: "0 6px",
     height: "24px",
     borderRadius: "6px",
     backgroundColor: "#21262d",
     border: "1px solid #30363d",
     color: "#c9d1d9",
     pointerEvents: "auto",
+    cursor: "pointer",
+    userSelect: "none",
+    "&:hover": {
+      backgroundColor: "#30363d",
+    } as any,
+    "&:focus-within": {
+      borderColor: "#1f6feb",
+      boxShadow: "0 0 0 2px rgba(31, 111, 235, 0.15)",
+    } as any,
   },
   modeSelectIcon: {
     display: "flex",
@@ -209,25 +219,93 @@ const useStyles = makeStyles({
     color: "#c9d1d9",
     opacity: 0.9,
   },
-  modeSelect: {
+  modeSelectButton: {
     appearance: "none",
     backgroundColor: "transparent",
     color: "#c9d1d9",
     border: "none",
     fontSize: "10px",
-    fontWeight: 600,
+    fontWeight: 700,
+    letterSpacing: "0.2px",
     outline: "none",
     cursor: "pointer",
-    paddingRight: "10px",
+    padding: 0,
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    minWidth: 0,
+    flex: 1,
+    textAlign: "left",
   },
   modeSelectChevron: {
-    width: 0,
-    height: 0,
-    borderLeft: "4px solid transparent",
-    borderRight: "4px solid transparent",
-    borderTop: "5px solid #8b949e",
-    opacity: 0.9,
-    marginLeft: "-6px",
+    display: "flex",
+    alignItems: "center",
+    color: "#8b949e",
+    opacity: 0.95,
+  },
+  modeMenu: {
+    position: "absolute",
+    left: 0,
+    bottom: "calc(100% + 6px)",
+    minWidth: "150px",
+    backgroundColor: "#161b22",
+    border: "1px solid #30363d",
+    borderRadius: "8px",
+    boxShadow: "0 10px 28px rgba(0,0,0,0.45)",
+    padding: "6px",
+    zIndex: 50,
+  },
+  modeMenuItem: {
+    width: "100%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "10px",
+    padding: "8px 10px",
+    borderRadius: "6px",
+    border: "1px solid transparent",
+    backgroundColor: "transparent",
+    color: "#c9d1d9",
+    cursor: "pointer",
+    fontSize: "12px",
+    fontWeight: 600,
+    textAlign: "left",
+    "&:hover": {
+      backgroundColor: "#21262d",
+      borderColor: "#30363d",
+    } as any,
+    "&:focus": {
+      outline: "none",
+      borderColor: "#1f6feb",
+      boxShadow: "0 0 0 2px rgba(31, 111, 235, 0.15)",
+    } as any,
+  },
+  modeMenuItemActive: {
+    backgroundColor: "rgba(31, 111, 235, 0.18)",
+    border: "1px solid rgba(31, 111, 235, 0.35)",
+  },
+  modeMenuItemLeft: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    minWidth: 0,
+  },
+  modeMenuItemLabel: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "2px",
+    minWidth: 0,
+  },
+  modeMenuItemTitle: {
+    fontSize: "12px",
+    fontWeight: 700,
+    lineHeight: 1.2,
+  },
+  modeMenuItemDesc: {
+    fontSize: "11px",
+    fontWeight: 500,
+    color: "#8b949e",
+    lineHeight: 1.2,
   },
   modeSelector: {
     padding: "4px 8px",
@@ -517,14 +595,74 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<"edit" | "ask">("edit");
+  const [modeMenuOpen, setModeMenuOpen] = useState<boolean>(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const modeMenuRef = useRef<HTMLDivElement>(null);
   const [changeTracker] = useState<ChangeTracking>(() => createChangeTracker());
   const currentMessageChangesRef = useRef<DocumentChange[]>([]);
   const [processingChanges, setProcessingChanges] = useState<Set<string>>(new Set());
   const [bulkIsProcessing, setBulkIsProcessing] = useState<boolean>(false);
   const messageIdCounter = useRef<number>(0);
   const styles = useStyles();
+
+  useEffect(() => {
+    if (!modeMenuOpen) {
+      return () => {};
+    }
+
+    const onMouseDown = (e: MouseEvent) => {
+      const el = modeMenuRef.current;
+      if (!el) {
+        return;
+      }
+      if (!el.contains(e.target as Node)) {
+        setModeMenuOpen(false);
+      }
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setModeMenuOpen(false);
+      }
+    };
+
+    window.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [modeMenuOpen]);
+
+  const resizeTextarea = React.useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      return;
+    }
+
+    // Grow from 1 line up to 10 lines, then scroll.
+    const MAX_LINES = 10;
+    const computed = window.getComputedStyle(textarea);
+    const fontSize = parseFloat(computed.fontSize || "13");
+    const lineHeight =
+      computed.lineHeight === "normal"
+        ? fontSize * 1.5
+        : parseFloat(computed.lineHeight || `${fontSize * 1.5}`);
+
+    const paddingTop = parseFloat(computed.paddingTop || "0");
+    const paddingBottom = parseFloat(computed.paddingBottom || "0");
+    const borderTop = parseFloat(computed.borderTopWidth || "0");
+    const borderBottom = parseFloat(computed.borderBottomWidth || "0");
+
+    const maxHeightPx =
+      lineHeight * MAX_LINES + paddingTop + paddingBottom + borderTop + borderBottom;
+
+    textarea.style.height = "auto";
+    const nextHeight = Math.min(textarea.scrollHeight, maxHeightPx);
+    textarea.style.height = `${nextHeight}px`;
+    textarea.style.overflowY = textarea.scrollHeight > maxHeightPx ? "auto" : "hidden";
+  }, []);
 
   // Set up change tracking callback for the tools
   useEffect(() => {
@@ -550,11 +688,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
 
   // Auto-resize textarea
   useEffect(() => {
-    const textarea = textareaRef.current;
-    if (textarea) {
-      textarea.style.height = "auto";
-      textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
-    }
+    resizeTextarea();
   }, [input]);
 
   // Handle paste events to preserve formatting
@@ -576,8 +710,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
       const newCursorPos = start + pastedText.length;
       textarea.setSelectionRange(newCursorPos, newCursorPos);
       // Trigger resize after paste
-      textarea.style.height = "auto";
-      textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+      resizeTextarea();
     });
   };
 
@@ -595,6 +728,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
     // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
+      textareaRef.current.style.overflowY = "hidden";
     }
 
     // Clear changes for this new message
@@ -1023,21 +1157,66 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
               />
               <div className={styles.buttonRow}>
                 <div className={styles.buttonRowLeft}>
-                  <div className={styles.modeSelectWrap} title="Mode">
-                    <span className={styles.modeSelectIcon}>
-                      {mode === "edit" ? <EditRegular style={{ fontSize: "12px" }} /> : <ChatRegular style={{ fontSize: "12px" }} />}
-                    </span>
-                    <select
-                      className={styles.modeSelect}
-                      value={mode}
-                      onChange={(e) => setMode(e.target.value as "edit" | "ask")}
+                  <div className={styles.modeSelectWrap} ref={modeMenuRef} title="Mode">
+                    <button
+                      type="button"
+                      className={styles.modeSelectButton}
+                      onClick={() => setModeMenuOpen((v) => !v)}
                       disabled={isLoading}
+                      aria-haspopup="listbox"
+                      aria-expanded={modeMenuOpen}
                       aria-label="Mode"
                     >
-                      <option value="edit">Edit</option>
-                      <option value="ask">Ask</option>
-                    </select>
-                    <span className={styles.modeSelectChevron} />
+                      <span className={styles.modeSelectIcon}>
+                        {mode === "edit" ? <EditRegular style={{ fontSize: "12px" }} /> : <ChatRegular style={{ fontSize: "12px" }} />}
+                      </span>
+                      <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {mode === "edit" ? "Edit" : "Ask"}
+                      </span>
+                      <span className={styles.modeSelectChevron}>
+                        <ChevronDownRegular style={{ fontSize: "14px" }} />
+                      </span>
+                    </button>
+
+                    {modeMenuOpen && (
+                      <div className={styles.modeMenu} role="listbox" aria-label="Mode options">
+                        <button
+                          type="button"
+                          className={`${styles.modeMenuItem} ${mode === "edit" ? styles.modeMenuItemActive : ""}`}
+                          onClick={() => {
+                            setMode("edit");
+                            setModeMenuOpen(false);
+                          }}
+                        >
+                          <span className={styles.modeMenuItemLeft}>
+                            <EditRegular style={{ fontSize: "14px", color: "#c9d1d9" }} />
+                            <span className={styles.modeMenuItemLabel}>
+                              <span className={styles.modeMenuItemTitle}>Edit</span>
+                              <span className={styles.modeMenuItemDesc}>Make changes in the document</span>
+                            </span>
+                          </span>
+                          {mode === "edit" && <CheckmarkCircleFilled style={{ fontSize: "14px", color: "#2ea043" }} />}
+                        </button>
+
+                        <button
+                          type="button"
+                          className={`${styles.modeMenuItem} ${mode === "ask" ? styles.modeMenuItemActive : ""}`}
+                          onClick={() => {
+                            setMode("ask");
+                            setModeMenuOpen(false);
+                          }}
+                        >
+                          <span className={styles.modeMenuItemLeft}>
+                            <ChatRegular style={{ fontSize: "14px", color: "#c9d1d9" }} />
+                            <span className={styles.modeMenuItemLabel}>
+                              <span className={styles.modeMenuItemTitle}>Ask</span>
+                              <span className={styles.modeMenuItemDesc}>Chat without editing</span>
+                            </span>
+                          </span>
+                          {mode === "ask" && <CheckmarkCircleFilled style={{ fontSize: "14px", color: "#2ea043" }} />}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className={styles.buttonRowRight}>
