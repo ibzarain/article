@@ -113,17 +113,30 @@ const useStyles = makeStyles({
     alignItems: "stretch",
     gap: "6px",
   },
+  inputBox: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "6px",
+    backgroundColor: "#0d1117",
+    border: "1px solid #30363d",
+    borderRadius: "8px",
+    padding: "6px",
+    "&:focus-within": {
+      borderColor: "#1f6feb",
+      boxShadow: "0 0 0 3px rgba(31, 111, 235, 0.1)",
+    } as any,
+  },
   textarea: {
     flex: 1,
     minHeight: "40px",
     maxHeight: "200px",
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
     fontSize: "13px",
-    backgroundColor: "#0d1117",
+    backgroundColor: "transparent",
     color: "#c9d1d9",
-    border: "1px solid #30363d",
-    borderRadius: "8px",
-    padding: "6px 12px",
+    border: "none",
+    borderRadius: "6px",
+    padding: "6px 8px",
     scrollbarGutter: "stable",
     position: "relative",
     resize: "none",
@@ -151,8 +164,6 @@ const useStyles = makeStyles({
     },
     "&:focus": {
       outline: "none",
-      borderColor: "#1f6feb",
-      boxShadow: "0 0 0 3px rgba(31, 111, 235, 0.1)",
     } as any,
     "&::placeholder": {
       color: "#6e7681",
@@ -162,10 +173,9 @@ const useStyles = makeStyles({
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#0d1117",
+    backgroundColor: "transparent",
     borderRadius: "6px",
     padding: "2px 2px",
-    border: "1px solid #21262d",
     pointerEvents: "auto",
     zIndex: 10,
   },
@@ -989,82 +999,84 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
 
         <div className={styles.inputContainer}>
           <div className={styles.inputRow}>
-            <textarea
-              ref={textareaRef}
-              className={styles.textarea}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onPaste={handlePaste}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
-              placeholder={mode === "edit" ? "Ask me to edit your document..." : "Ask me a question..."}
-              disabled={isLoading}
-              rows={1}
-              spellCheck={false}
-              autoComplete="off"
-              data-gramm="false"
-              data-gramm_editor="false"
-              data-enable-grammarly="false"
-            />
-            <div className={styles.buttonRow}>
-              <div className={styles.buttonRowLeft}>
-                <div className={styles.modeSelectWrap} title="Mode">
-                  <span className={styles.modeSelectIcon}>
-                    {mode === "edit" ? <EditRegular style={{ fontSize: "12px" }} /> : <ChatRegular style={{ fontSize: "12px" }} />}
-                  </span>
-                  <select
-                    className={styles.modeSelect}
-                    value={mode}
-                    onChange={(e) => setMode(e.target.value as "edit" | "ask")}
-                    disabled={isLoading}
-                    aria-label="Mode"
-                  >
-                    <option value="edit">Edit</option>
-                    <option value="ask">Ask</option>
-                  </select>
-                  <span className={styles.modeSelectChevron} />
+            <div className={styles.inputBox}>
+              <textarea
+                ref={textareaRef}
+                className={styles.textarea}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onPaste={handlePaste}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                placeholder={mode === "edit" ? "Ask me to edit your document..." : "Ask me a question..."}
+                disabled={isLoading}
+                rows={1}
+                spellCheck={false}
+                autoComplete="off"
+                data-gramm="false"
+                data-gramm_editor="false"
+                data-enable-grammarly="false"
+              />
+              <div className={styles.buttonRow}>
+                <div className={styles.buttonRowLeft}>
+                  <div className={styles.modeSelectWrap} title="Mode">
+                    <span className={styles.modeSelectIcon}>
+                      {mode === "edit" ? <EditRegular style={{ fontSize: "12px" }} /> : <ChatRegular style={{ fontSize: "12px" }} />}
+                    </span>
+                    <select
+                      className={styles.modeSelect}
+                      value={mode}
+                      onChange={(e) => setMode(e.target.value as "edit" | "ask")}
+                      disabled={isLoading}
+                      aria-label="Mode"
+                    >
+                      <option value="edit">Edit</option>
+                      <option value="ask">Ask</option>
+                    </select>
+                    <span className={styles.modeSelectChevron} />
+                  </div>
                 </div>
-              </div>
-              <div className={styles.buttonRowRight}>
-                {pendingChangeCount > 0 && (
-                  <>
-                    <button
-                      className={styles.bulkButton}
-                      type="button"
-                      onClick={handleAcceptAll}
-                      disabled={bulkIsProcessing || isLoading}
-                      title="Accept all pending changes"
-                    >
-                      Accept all ({pendingChangeCount})
-                    </button>
-                    <button
-                      className={`${styles.bulkButton} ${styles.bulkButtonReject}`}
-                      type="button"
-                      onClick={handleRejectAll}
-                      disabled={bulkIsProcessing || isLoading}
-                      title="Reject all pending changes"
-                    >
-                      Reject all
-                    </button>
-                  </>
-                )}
-                <button
-                  disabled={!input.trim() || isLoading}
-                  onClick={handleSend}
-                  className={styles.sendButton}
-                  title="Send message (Enter)"
-                  type="button"
-                >
-                  {isLoading ? (
-                    <Spinner size="tiny" />
-                  ) : (
-                    <ArrowUpRegular style={{ fontSize: "14px" }} />
+                <div className={styles.buttonRowRight}>
+                  {pendingChangeCount > 0 && (
+                    <>
+                      <button
+                        className={styles.bulkButton}
+                        type="button"
+                        onClick={handleAcceptAll}
+                        disabled={bulkIsProcessing || isLoading}
+                        title="Accept all pending changes"
+                      >
+                        Accept all ({pendingChangeCount})
+                      </button>
+                      <button
+                        className={`${styles.bulkButton} ${styles.bulkButtonReject}`}
+                        type="button"
+                        onClick={handleRejectAll}
+                        disabled={bulkIsProcessing || isLoading}
+                        title="Reject all pending changes"
+                      >
+                        Reject all
+                      </button>
+                    </>
                   )}
-                </button>
+                  <button
+                    disabled={!input.trim() || isLoading}
+                    onClick={handleSend}
+                    className={styles.sendButton}
+                    title="Send message (Enter)"
+                    type="button"
+                  >
+                    {isLoading ? (
+                      <Spinner size="tiny" />
+                    ) : (
+                      <ArrowUpRegular style={{ fontSize: "14px" }} />
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
