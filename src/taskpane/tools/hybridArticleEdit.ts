@@ -1524,10 +1524,10 @@ MANDATORY WORKFLOW - FOLLOW THIS EXACTLY:
 3. Once readDocument returns matches:
    - Use the EXACT matchText from the results as searchText for insertText/editDocument/deleteText
    - If multiple matches, use the first one (or the one that makes sense in context)
-   - For "Delete and substitute" instructions involving numbered paragraphs like "1.2" / "1.3":
-     - Prefer using editDocument with searchText set to the numbered label (e.g., "1.2") and newText set to the replacement content.
-     - This will render an inline red/green replacement in the SAME numbered list item (not as a separate inserted paragraph).
-     - Only use deleteText + insertText if the instruction explicitly says to insert a brand new paragraph elsewhere.
+   - For "Delete and substitute"/"Replace"/"Substitute" instructions:
+     - Use editDocument (NOT deleteText + insertText). This renders a proper inline replacement: green new text at the start, red struck-through old text after.
+     - If the instruction references numbered paragraphs (e.g., "1.2", "1.3"), set searchText to the numbered label (e.g., "1.2") and set newText to the replacement content.
+     - Only use insertText for true additions (e.g., "Add the following paragraph before ...") where no existing text is being replaced.
    - Call the appropriate tool with the matchText as searchText
 
 4. CRITICAL: If readDocument doesn't find the text after trying multiple strategies:

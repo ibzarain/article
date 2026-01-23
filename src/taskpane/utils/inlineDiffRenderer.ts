@@ -73,22 +73,21 @@ export async function renderInlineDiff(change: DocumentChange): Promise<void> {
         const oldTextDisplay = change.oldText;
         const newTextDisplay = change.newText;
         
-        // Replace with old text first (strikethrough, red)
-        range.insertText(oldTextDisplay, Word.InsertLocation.replace);
-        await context.sync();
-        
-        // Apply strikethrough and red color to old text
-        range.font.strikeThrough = true;
-        range.font.color = '#f48771'; // Red color
-        await context.sync();
-        
-        // Insert new text after old text with green highlighting.
-        // Use a newline separator so replacement is clearly visible.
-        const newRange = range.insertText(`\n${newTextDisplay}`, Word.InsertLocation.after);
+        // Replace with NEW text first (green)
+        range.insertText(newTextDisplay, Word.InsertLocation.replace);
         await context.sync();
         
         // Apply green color to new text
-        newRange.font.color = '#89d185'; // Green color
+        range.font.color = '#89d185'; // Green color
+        await context.sync();
+        
+        // Insert old text after new text (strikethrough, red), so it starts at the same spot.
+        const oldRange = range.insertText(`\n${oldTextDisplay}`, Word.InsertLocation.after);
+        await context.sync();
+        
+        // Apply strikethrough and red color to old text
+        oldRange.font.strikeThrough = true;
+        oldRange.font.color = '#f48771'; // Red color
         await context.sync();
         
       } else if (change.type === 'insert' && change.newText) {
