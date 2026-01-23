@@ -580,16 +580,21 @@ const createStyles = (isLight: boolean): any => ({
   },
 });
 
-const useStyles = (isLight: boolean) => {
-  return makeStyles(createStyles(isLight) as any);
-};
+// IMPORTANT: `makeStyles` returns a hook. Hooks must be called at the top level of the component,
+// not inside `useMemo`/callbacks/conditionals. We create stable hooks for each theme and call both.
+const useLightStyles = makeStyles(createStyles(true) as any);
+const useDarkStyles = makeStyles(createStyles(false) as any);
 
 const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
   // Detect system theme preference
   const getInitialTheme = (): boolean => {
-    const stored = localStorage.getItem("amico_article_theme");
-    if (stored !== null) {
-      return stored === "light";
+    try {
+      const stored = localStorage.getItem("amico_article_theme");
+      if (stored !== null) {
+        return stored === "light";
+      }
+    } catch {
+      // In some Office/embedded webviews, localStorage can be unavailable or throw.
     }
     // Check system preference
     if (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) {
@@ -598,7 +603,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
     return false;
   };
 
-  const [isLightTheme, setIsLightTheme] = useState<boolean>(getInitialTheme);
+  const [isLightTheme, setIsLightTheme] = useState<boolean>(() => getInitialTheme());
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -613,12 +618,18 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
   const [processingChanges, setProcessingChanges] = useState<Set<string>>(new Set());
   const [bulkIsProcessing, setBulkIsProcessing] = useState<boolean>(false);
   const messageIdCounter = useRef<number>(0);
-  const styles = useMemo(() => useStyles(isLightTheme)(), [isLightTheme]);
+  const lightStyles = useLightStyles();
+  const darkStyles = useDarkStyles();
+  const styles = isLightTheme ? lightStyles : darkStyles;
 
   const toggleTheme = () => {
     const newTheme = !isLightTheme;
     setIsLightTheme(newTheme);
-    localStorage.setItem("amico_article_theme", newTheme ? "light" : "dark");
+    try {
+      localStorage.setItem("amico_article_theme", newTheme ? "light" : "dark");
+    } catch {
+      // Ignore if storage is unavailable.
+    }
   };
 
   useEffect(() => {
@@ -1201,19 +1212,6 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
               />
               <div className={styles.buttonRow}>
                 <div className={styles.buttonRowLeft}>
-                  <button
-                    type="button"
-                    className={styles.themeToggleButton}
-                    onClick={toggleTheme}
-                    title={isLightTheme ? "Switch to dark theme" : "Switch to light theme"}
-                    aria-label={isLightTheme ? "Switch to dark theme" : "Switch to light theme"}
-                  >
-                    {isLightTheme ? (
-                      <WeatherMoonRegular style={{ fontSize: "14px" }} />
-                    ) : (
-                      <WeatherSunnyRegular style={{ fontSize: "14px" }} />
-                    )}
-                  </button>
                   <div className={styles.modeSelectWrap} ref={modeMenuRef} title="Mode">
                     <button
                       type="button"
@@ -1271,9 +1269,9 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                     aria-label={isLightTheme ? "Switch to dark theme" : "Switch to light theme"}
                   >
                     {isLightTheme ? (
-                      <WeatherMoonRegular style={{ fontSize: "14px" }} />
+                      <WeatherMoonRegular style={{ fontSize: "16px" }} />
                     ) : (
-                      <WeatherSunnyRegular style={{ fontSize: "14px" }} />
+                      <WeatherSunnyRegular style={{ fontSize: "16px" }} />
                     )}
                   </button>
                 </div>
