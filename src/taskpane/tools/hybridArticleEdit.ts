@@ -12,11 +12,19 @@ export function setHybridArticleChangeTracker(tracker: (change: DocumentChange) 
   changeTracker = tracker;
 }
 
+type ScopedReadState = {
+  hasFreshRead: boolean;
+  lastQuery?: string;
+};
+
 /**
  * Creates a scoped readDocument tool that only reads content within article boundaries
  * This is a proper search tool that returns matches with context snippets
  */
-function createScopedReadDocumentTool(articleBoundaries: ArticleBoundaries) {
+function createScopedReadDocumentTool(
+  articleBoundaries: ArticleBoundaries,
+  readState: ScopedReadState
+) {
   return {
     description: 'Search ARTICLE content for a query and return contextual snippets around each match. This is a SEARCH tool - use it to find exact text before editing. Returns matches with snippets showing context. If query is "*" or "all", returns the full article content.',
     parameters: {
@@ -192,6 +200,9 @@ function createScopedReadDocumentTool(articleBoundaries: ArticleBoundaries) {
           console.log(`[readDocument] Search for "${query}" found ${result.totalFound} match(es)`);
         }
 
+        readState.hasFreshRead = true;
+        readState.lastQuery = query;
+
         return {
           success: true,
           query,
@@ -213,7 +224,11 @@ function createScopedReadDocumentTool(articleBoundaries: ArticleBoundaries) {
 /**
  * Creates scoped editing tools that only work within article boundaries
  */
-function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName: string) {
+function createScopedEditTools(
+  articleBoundaries: ArticleBoundaries,
+  articleName: string,
+  readState: ScopedReadState
+) {
   const normalizeLeadingWhitespace = (value: string) => value.replace(/^\s+/, '');
   const isNumberedParagraphLabel = (value: string) => /^\s*\d+\.\d+\s*$/.test(value);
   const extractNumberedLabel = (value: string) => {
@@ -223,6 +238,13 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
   const paragraphStartsWithLabel = (paragraphText: string, label: string) => {
     const normalizedParagraph = normalizeLeadingWhitespace(paragraphText || '');
     return normalizedParagraph.startsWith(`${label} `) || normalizedParagraph === label;
+  };
+  const ensureFreshRead = (action: string) => {
+    if (!readState.hasFreshRead) {
+      throw new Error(
+        `Must call readDocument before ${action}. Each step must re-read the article and never reuse prior locations.`
+      );
+    }
   };
 
   return {
@@ -241,6 +263,7 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
       },
       execute: async ({ searchText, newText, replaceAll, matchCase, matchWholeWord }: any) => {
         try {
+          ensureFreshRead('editDocument');
           const warnings: string[] = [];
           const labelOnly = isNumberedParagraphLabel(searchText);
           const label = extractNumberedLabel(searchText);
@@ -363,6 +386,8 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
             }
           }
 
+          readState.hasFreshRead = false;
+
           return {
             success: true,
             replaced: result.replaced,
@@ -395,6 +420,7 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
       },
       execute: async ({ text, location, searchText }: any) => {
         try {
+          ensureFreshRead('insertText');
           const warnings: string[] = [];
           const labelOnly = searchText ? isNumberedParagraphLabel(searchText) : false;
           const label = searchText ? extractNumberedLabel(searchText) : '';
@@ -983,6 +1009,8 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
             }
           }
 
+          readState.hasFreshRead = false;
+
           return {
             success: true,
             message: `Text inserted successfully at ${location}`,
@@ -1010,6 +1038,7 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
       },
       execute: async ({ searchText, deleteAll, matchCase, matchWholeWord }: any) => {
         try {
+          ensureFreshRead('deleteText');
           const labelOnly = isNumberedParagraphLabel(searchText);
           const label = extractNumberedLabel(searchText);
           const shouldMatchWholeWord = typeof matchWholeWord === 'boolean' ? matchWholeWord : labelOnly;
@@ -1113,6 +1142,8 @@ function createScopedEditTools(articleBoundaries: ArticleBoundaries, articleName
             };
           });
 
+          readState.hasFreshRead = false;
+
           return {
             success: true,
             deleted: result.deleted,
@@ -1168,8 +1199,9 @@ export async function executeArticleInstructionsHybrid(
     // Intentionally do NOT log full article content (too verbose / may contain sensitive text)
 
     // Create scoped tools that only work within the article
-    const scopedReadDocument = createScopedReadDocumentTool(articleBoundaries);
-    const scopedEditTools = createScopedEditTools(articleBoundaries, articleName);
+    const readState: ScopedReadState = { hasFreshRead: false };
+    const scopedReadDocument = createScopedReadDocumentTool(articleBoundaries, readState);
+    const scopedEditTools = createScopedEditTools(articleBoundaries, articleName, readState);
 
     // Create a scoped agent with only article content
     // Include the article content directly in the prompt so AI knows what it's working with
