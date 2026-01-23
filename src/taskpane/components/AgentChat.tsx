@@ -12,7 +12,12 @@ import { DocumentChange, ChangeTracking } from "../types/changes";
 import { setChangeTracker } from "../tools/wordEditWithTracking";
 import { setArticleChangeTracker } from "../tools/articleEditTools";
 import { setFastArticleChangeTracker } from "../tools/fastArticleEdit";
-import { setHybridArticleChangeTracker, executeArticleInstructionsHybrid } from "../tools/hybridArticleEdit";
+import {
+  setHybridArticleChangeTracker,
+  executeArticleInstructionsHybrid,
+  planArticleInstructionsHybrid,
+  executeArticleInstructionStepHybrid
+} from "../tools/hybridArticleEdit";
 
 interface AgentChatProps {
   agent: ReturnType<typeof import("../agent/wordAgent").createWordAgent>;
@@ -769,6 +774,12 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
   const stepPrefixRegex = /^\s*(?:\.\d+|\d+\.(?!\d)|\d+\))\s+/;
 
   const stripStepPrefix = (value: string): string => value.replace(stepPrefixRegex, "");
+  const getHeaderLine = (text: string): string | undefined => {
+    const normalized = text.replace(/\r\n/g, "\n");
+    const lines = normalized.split("\n");
+    const headerIndex = lines.findIndex(line => articleHeaderRegex.test(line));
+    return headerIndex >= 0 ? lines[headerIndex].trim() : undefined;
+  };
 
   const splitInstructions = (text: string): { steps: string[]; headerLine?: string } => {
     const normalized = text.replace(/\r\n/g, "\n");
@@ -914,7 +925,25 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
           }
           : agent;
 
-      const { steps, headerLine } = splitInstructions(userMessage);
+      const headerLine = getHeaderLine(userMessage);
+      const isArticleEdit = mode === "edit" && isArticleEditInstruction(userMessage);
+
+      let plannedSteps: string[] | null = null;
+      let plannedArticleName: string | undefined;
+      let plannedBoundaries: any;
+
+      if (isArticleEdit) {
+        const planResult = await planArticleInstructionsHybrid(userMessage, agent.apiKey, agent.model);
+        if (planResult.success && planResult.steps && planResult.steps.length > 0) {
+          plannedSteps = planResult.steps;
+          plannedArticleName = planResult.articleName;
+          plannedBoundaries = planResult.articleBoundaries;
+        }
+      }
+
+      const { steps } = plannedSteps
+        ? { steps: plannedSteps }
+        : splitInstructions(userMessage);
       const isMultiStep = steps.length > 1;
 
       if (isMultiStep) {
@@ -950,7 +979,18 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
             let hybridSucceeded: boolean | null = null;
             let hybridError: string | undefined;
 
-            if (shouldUseHybrid) {
+            if (shouldUseHybrid && plannedBoundaries && plannedArticleName) {
+              const result = await executeArticleInstructionStepHybrid(
+                stepInstruction,
+                agent.apiKey,
+                agent.model,
+                plannedArticleName,
+                plannedBoundaries
+              );
+              hybridSucceeded = result.success;
+              hybridError = result.error;
+              response = result.success ? "" : `Error: ${result.error || "Unknown error"}`;
+            } else if (shouldUseHybrid) {
               const result = await executeArticleInstructionsHybrid(stepInstruction, agent.apiKey, agent.model);
               hybridSucceeded = result.success;
               hybridError = result.error;
@@ -1013,12 +1053,25 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
       let response: string;
       let hybridSucceeded: boolean | null = null;
       let hybridError: string | undefined;
-      if (hasArticleInstructions) {
-        // Hybrid execution: Algorithm parses/finds, AI only for final insertion (fast like Cursor)
+      if (hasArticleInstructions && plannedBoundaries && plannedArticleName) {
+        const singleStepInstruction = headerLine && !isArticleInstruction(userMessage)
+          ? `${headerLine}\n${userMessage}`
+          : userMessage;
+        const result = await executeArticleInstructionStepHybrid(
+          singleStepInstruction,
+          agent.apiKey,
+          agent.model,
+          plannedArticleName,
+          plannedBoundaries
+        );
+        hybridSucceeded = result.success;
+        hybridError = result.error;
+        response = result.success ? "" : `Error: ${result.error || "Unknown error"}`;
+      } else if (hasArticleInstructions) {
+        // Hybrid execution fallback
         const result = await executeArticleInstructionsHybrid(userMessage, agent.apiKey, agent.model);
         hybridSucceeded = result.success;
         hybridError = result.error;
-        // Keep the visible chat response minimal; UI will show the diffs + accept/reject.
         response = result.success ? "" : `Error: ${result.error || "Unknown error"}`;
       } else {
         // Get response from agent (changes will be tracked automatically via the agent's onChange callback)

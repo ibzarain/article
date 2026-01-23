@@ -16,6 +16,9 @@ type ScopedReadState = {
   hasFreshRead: boolean;
   lastQuery?: string;
 };
+type ScopedReadGuard = {
+  requiredTokens: string[];
+};
 
 /**
  * Creates a scoped readDocument tool that only reads content within article boundaries
@@ -23,7 +26,8 @@ type ScopedReadState = {
  */
 function createScopedReadDocumentTool(
   articleBoundaries: ArticleBoundaries,
-  readState: ScopedReadState
+  readState: ScopedReadState,
+  readGuard: ScopedReadGuard
 ) {
   return {
     description: 'Search ARTICLE content for a query and return contextual snippets around each match. This is a SEARCH tool - use it to find exact text before editing. Returns matches with snippets showing context. If query is "*" or "all", returns the full article content.',
@@ -61,6 +65,19 @@ function createScopedReadDocumentTool(
       matchWholeWord?: boolean;
     }) => {
       try {
+        if (readGuard.requiredTokens.length > 0) {
+          const normalizedQuery = query.toLowerCase();
+          const allowed = readGuard.requiredTokens.some(token =>
+            normalizedQuery.includes(token.toLowerCase())
+          );
+          if (!allowed) {
+            return {
+              success: false,
+              error: `readDocument query must include one of: ${readGuard.requiredTokens.join(', ')}`,
+            };
+          }
+        }
+
         const result = await Word.run(async (context) => {
           // Get article range
           const paragraphs = context.document.body.paragraphs;
@@ -220,6 +237,75 @@ function createScopedReadDocumentTool(
     },
   };
 }
+
+const buildRequiredTokens = (instruction: string): string[] => {
+  return Array.from(new Set(
+    (instruction.match(/\b\d+\.\d+\b/g) || [])
+      .map(token => token.trim())
+      .filter(Boolean)
+  ));
+};
+
+const buildArticleContentPreview = (articleContent: string, maxChars: number) => {
+  if (articleContent.length <= maxChars) {
+    return articleContent;
+  }
+  return `${articleContent.substring(0, maxChars)}...`;
+};
+
+const parsePlannerJson = (raw: string): { steps: Array<{ instruction: string }> } | null => {
+  const trimmed = raw.trim();
+  const normalized = trimmed.startsWith('```')
+    ? trimmed.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()
+    : trimmed;
+  try {
+    const parsed = JSON.parse(normalized);
+    if (parsed && Array.isArray(parsed.steps)) {
+      return parsed as { steps: Array<{ instruction: string }> };
+    }
+  } catch {
+    return null;
+  }
+  return null;
+};
+
+const planStepsWithAI = async (
+  instruction: string,
+  articleName: string,
+  articleContent: string,
+  apiKey: string,
+  model: string
+): Promise<string[]> => {
+  const contentPreview = buildArticleContentPreview(articleContent, 7000);
+  const plannerAgent = {
+    apiKey,
+    model,
+    tools: {},
+    system: `You are a planning assistant for Word document edits.
+Return JSON ONLY in this exact shape: {"steps":[{"instruction":"..."}]}.
+Rules:
+- Each step is a single actionable edit instruction.
+- Do NOT include numbering prefixes like ".1" or "1." in the instruction.
+- Keep any quoted anchors or numbered paragraph references (e.g., "1.2", "1.3") intact.
+- Do NOT invent anchors not present in the provided article content.
+- Do NOT include extra commentary, markdown, or code fences.`,
+  };
+
+  const plannerPrompt = `ARTICLE ${articleName} CONTENT (for planning):
+${contentPreview}
+
+USER INSTRUCTION:
+${instruction}`;
+
+  const response = await generateAgentResponse(plannerAgent, plannerPrompt);
+  const parsed = parsePlannerJson(response || '');
+  if (!parsed || parsed.steps.length === 0) {
+    return [instruction];
+  }
+  return parsed.steps
+    .map(step => (step.instruction || '').trim())
+    .filter(step => step.length > 0);
+};
 
 /**
  * Creates scoped editing tools that only work within article boundaries
@@ -1161,62 +1247,27 @@ function createScopedEditTools(
   };
 }
 
-/**
- * Executes article instructions using hybrid approach:
- * 1. Extracts only the relevant article content
- * 2. Passes only that article to AI for processing
- * 3. AI makes edits only within that article
- */
-export async function executeArticleInstructionsHybrid(
+async function runHybridStepWithBoundaries(
   instruction: string,
   apiKey: string,
-  model: string
-): Promise<{ success: boolean; error?: string; results?: string[] }> {
-  try {
-    // Parse article name from instruction
-    const articleName = parseArticleName(instruction);
-    if (!articleName) {
-      return {
-        success: false,
-        error: 'Could not parse article name from instruction. Expected format: "ARTICLE A-1" or "A-1"',
-      };
-    }
+  model: string,
+  articleName: string,
+  articleBoundaries: ArticleBoundaries
+): Promise<string> {
+  const readState: ScopedReadState = { hasFreshRead: false };
+  const readGuard: ScopedReadGuard = { requiredTokens: buildRequiredTokens(instruction) };
+  const scopedReadDocument = createScopedReadDocumentTool(articleBoundaries, readState, readGuard);
+  const scopedEditTools = createScopedEditTools(articleBoundaries, articleName, readState);
+  const articleContentPreview = buildArticleContentPreview(articleBoundaries.articleContent, 2000);
 
-    // Extract article boundaries
-    const articleBoundaries = await extractArticle(`ARTICLE ${articleName}`);
-    if (!articleBoundaries) {
-      return {
-        success: false,
-        error: `Article "${articleName}" not found in document`,
-      };
-    }
-
-    // Log the article content that was extracted
-    console.log(`[executeArticleInstructionsHybrid] Extracted ARTICLE ${articleName}:`);
-    console.log(`  Start paragraph: ${articleBoundaries.startParagraphIndex}`);
-    console.log(`  End paragraph: ${articleBoundaries.endParagraphIndex}`);
-    console.log(`  Content length: ${articleBoundaries.articleContent.length} characters`);
-    // Intentionally do NOT log full article content (too verbose / may contain sensitive text)
-
-    // Create scoped tools that only work within the article
-    const readState: ScopedReadState = { hasFreshRead: false };
-    const scopedReadDocument = createScopedReadDocumentTool(articleBoundaries, readState);
-    const scopedEditTools = createScopedEditTools(articleBoundaries, articleName, readState);
-
-    // Create a scoped agent with only article content
-    // Include the article content directly in the prompt so AI knows what it's working with
-    const articleContentPreview = articleBoundaries.articleContent.length > 2000
-      ? articleBoundaries.articleContent.substring(0, 2000) + '...'
-      : articleBoundaries.articleContent;
-
-    const scopedAgent = {
-      apiKey,
-      model,
-      tools: {
-        readDocument: scopedReadDocument,
-        ...scopedEditTools,
-      },
-      system: `You are a helpful AI assistant that can edit Word documents. You are currently working ONLY within ARTICLE ${articleName}.
+  const scopedAgent = {
+    apiKey,
+    model,
+    tools: {
+      readDocument: scopedReadDocument,
+      ...scopedEditTools,
+    },
+    system: `You are a helpful AI assistant that can edit Word documents. You are currently working ONLY within ARTICLE ${articleName}.
 
 IMPORTANT: You can ONLY read and edit content within ARTICLE ${articleName}. All your tools are scoped to this article only.
 
@@ -1255,6 +1306,7 @@ MANDATORY WORKFLOW - FOLLOW THIS EXACTLY:
 5. NEVER insert at "beginning" or "end" unless the user explicitly asks for that. If user says "before X", you MUST find X first.
 
 6. Use ONE tool call at a time. Wait for the tool result before deciding the next action. NEVER reuse a prior location; always re-read before each edit.
+   - When a numbered paragraph is referenced (e.g., "1.3"), every readDocument query MUST include that number.
 
 7. For insertText: location "before"/"after"/"inline" requires searchText from readDocument results.
 
@@ -1267,11 +1319,135 @@ The user has provided the following instructions for ARTICLE ${articleName}:
 ${instruction}
 
 Use your AI intelligence to understand where to make the changes, then use the tools to execute them.`,
-    };
+  };
 
-    // Generate response using the scoped agent
-    // The agent will only see and work with the article content
-    const response = await generateAgentResponse(scopedAgent, instruction);
+  return generateAgentResponse(scopedAgent, instruction);
+}
+
+export async function planArticleInstructionsHybrid(
+  instruction: string,
+  apiKey: string,
+  model: string
+): Promise<{
+  success: boolean;
+  error?: string;
+  steps?: string[];
+  articleName?: string;
+  articleBoundaries?: ArticleBoundaries;
+}> {
+  try {
+    const articleName = parseArticleName(instruction);
+    if (!articleName) {
+      return {
+        success: false,
+        error: 'Could not parse article name from instruction. Expected format: "ARTICLE A-1" or "A-1"',
+      };
+    }
+
+    const articleBoundaries = await extractArticle(`ARTICLE ${articleName}`);
+    if (!articleBoundaries) {
+      return {
+        success: false,
+        error: `Article "${articleName}" not found in document`,
+      };
+    }
+
+    const steps = await planStepsWithAI(
+      instruction,
+      articleName,
+      articleBoundaries.articleContent,
+      apiKey,
+      model
+    );
+
+    return {
+      success: true,
+      steps,
+      articleName,
+      articleBoundaries,
+    };
+  } catch (error) {
+    console.error('Error planning article instructions:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error planning article instructions',
+    };
+  }
+}
+
+export async function executeArticleInstructionStepHybrid(
+  instruction: string,
+  apiKey: string,
+  model: string,
+  articleName: string,
+  articleBoundaries: ArticleBoundaries
+): Promise<{ success: boolean; error?: string; results?: string[] }> {
+  try {
+    const response = await runHybridStepWithBoundaries(
+      instruction,
+      apiKey,
+      model,
+      articleName,
+      articleBoundaries
+    );
+
+    return {
+      success: true,
+      results: [response],
+    };
+  } catch (error) {
+    console.error('Error executing article instruction step:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error executing article instruction step',
+    };
+  }
+}
+
+/**
+ * Executes article instructions using hybrid approach:
+ * 1. Extracts only the relevant article content
+ * 2. Passes only that article to AI for processing
+ * 3. AI makes edits only within that article
+ */
+export async function executeArticleInstructionsHybrid(
+  instruction: string,
+  apiKey: string,
+  model: string
+): Promise<{ success: boolean; error?: string; results?: string[] }> {
+  try {
+    // Parse article name from instruction
+    const articleName = parseArticleName(instruction);
+    if (!articleName) {
+      return {
+        success: false,
+        error: 'Could not parse article name from instruction. Expected format: "ARTICLE A-1" or "A-1"',
+      };
+    }
+
+    // Extract article boundaries
+    const articleBoundaries = await extractArticle(`ARTICLE ${articleName}`);
+    if (!articleBoundaries) {
+      return {
+        success: false,
+        error: `Article "${articleName}" not found in document`,
+      };
+    }
+
+    // Log the article content that was extracted
+    console.log(`[executeArticleInstructionsHybrid] Extracted ARTICLE ${articleName}:`);
+    console.log(`  Start paragraph: ${articleBoundaries.startParagraphIndex}`);
+    console.log(`  End paragraph: ${articleBoundaries.endParagraphIndex}`);
+    console.log(`  Content length: ${articleBoundaries.articleContent.length} characters`);
+    // Intentionally do NOT log full article content (too verbose / may contain sensitive text)
+
+    const response = await runHybridStepWithBoundaries(
+      instruction,
+      apiKey,
+      model,
+      articleName,
+      articleBoundaries
+    );
 
     return {
       success: true,
