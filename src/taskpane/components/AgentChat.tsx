@@ -333,9 +333,10 @@ const createStyles = (isLight: boolean): any => ({
       backgroundColor: "#0860ca",
     },
     "&:disabled": {
-      opacity: 0.4,
+      opacity: 1,
       cursor: "not-allowed",
-      backgroundColor: isLight ? "#d0d7de" : "#30363d",
+      backgroundColor: isLight ? "#656d76" : "#30363d",
+      color: isLight ? "#ffffff" : "#c9d1d9",
     },
   },
   themeToggleButton: {
@@ -365,9 +366,9 @@ const createStyles = (isLight: boolean): any => ({
     padding: "3px 6px",
     fontSize: "10px",
     borderRadius: "4px",
-    border: "none",
-    backgroundColor: "#1e4620",
-    color: "#89d185",
+    border: isLight ? "1px solid #2da44e" : "none",
+    backgroundColor: isLight ? "#dafbe1" : "#1e4620",
+    color: isLight ? "#1a7f37" : "#89d185",
     cursor: "pointer",
     fontWeight: "500",
     transition: "all 0.15s ease",
@@ -378,7 +379,7 @@ const createStyles = (isLight: boolean): any => ({
     gap: "3px",
     pointerEvents: "auto",
     "&:hover:not(:disabled)": {
-      backgroundColor: "#2d5a2f",
+      backgroundColor: isLight ? "#aceebb" : "#2d5a2f",
     },
     "&:disabled": {
       opacity: 0.5,
@@ -386,10 +387,11 @@ const createStyles = (isLight: boolean): any => ({
     },
   },
   bulkButtonReject: {
-    backgroundColor: "#5a1d1d",
-    color: "#f48771",
+    backgroundColor: isLight ? "#ffebe9" : "#5a1d1d",
+    color: isLight ? "#cf222e" : "#f48771",
+    border: isLight ? "1px solid #da3633" : "none",
     "&:hover:not(:disabled)": {
-      backgroundColor: "#6a2d2d",
+      backgroundColor: isLight ? "#ffc1cc" : "#6a2d2d",
     } as any,
   },
   thinking: {
@@ -458,20 +460,20 @@ const createStyles = (isLight: boolean): any => ({
   },
   decisionPill: {
     padding: "2px 6px",
-    borderRadius: "999px",
+    borderRadius: "4px",
     fontSize: "10px",
     fontWeight: 600,
     border: isLight ? "1px solid #d0d7de" : "1px solid #30363d",
   },
   acceptedPill: {
-    backgroundColor: "#1e4620",
-    color: "#89d185",
-    borderColor: "#2d5a2f",
+    backgroundColor: isLight ? "#dafbe1" : "#1e4620",
+    color: isLight ? "#1a7f37" : "#89d185",
+    borderColor: isLight ? "#2da44e" : "#2d5a2f",
   } as any,
   rejectedPill: {
-    backgroundColor: "#5a1d1d",
-    color: "#f48771",
-    borderColor: "#6a2d2d",
+    backgroundColor: isLight ? "#ffebe9" : "#5a1d1d",
+    color: isLight ? "#cf222e" : "#f48771",
+    borderColor: isLight ? "#da3633" : "#6a2d2d",
   } as any,
   changeType: {
     fontSize: "10px",
@@ -486,12 +488,12 @@ const createStyles = (isLight: boolean): any => ({
     color: "#75beff",
   },
   insertType: {
-    backgroundColor: "#1e4620",
-    color: "#89d185",
+    backgroundColor: isLight ? "#dafbe1" : "#1e4620",
+    color: isLight ? "#1a7f37" : "#89d185",
   },
   deleteType: {
-    backgroundColor: "#5a1d1d",
-    color: "#f48771",
+    backgroundColor: isLight ? "#ffebe9" : "#5a1d1d",
+    color: isLight ? "#cf222e" : "#f48771",
   },
   formatType: {
     backgroundColor: "#4a148c",
@@ -514,10 +516,11 @@ const createStyles = (isLight: boolean): any => ({
     fontWeight: "500",
   },
   acceptButton: {
-    backgroundColor: "#1e4620",
-    color: "#89d185",
+    backgroundColor: isLight ? "#dafbe1" : "#1e4620",
+    color: isLight ? "#1a7f37" : "#89d185",
+    border: isLight ? "1px solid #2da44e" : "none",
     "&:hover:not(:disabled)": {
-      backgroundColor: "#2d5a2f",
+      backgroundColor: isLight ? "#aceebb" : "#2d5a2f",
     },
     "&:disabled": {
       opacity: 0.5,
@@ -525,10 +528,11 @@ const createStyles = (isLight: boolean): any => ({
     },
   },
   rejectButton: {
-    backgroundColor: "#5a1d1d",
-    color: "#f48771",
+    backgroundColor: isLight ? "#ffebe9" : "#5a1d1d",
+    color: isLight ? "#cf222e" : "#f48771",
+    border: isLight ? "1px solid #da3633" : "none",
     "&:hover:not(:disabled)": {
-      backgroundColor: "#6a2d2d",
+      backgroundColor: isLight ? "#ffc1cc" : "#6a2d2d",
     },
     "&:disabled": {
       opacity: 0.5,
@@ -550,22 +554,26 @@ const createStyles = (isLight: boolean): any => ({
     wordBreak: "break-word",
   },
   diffOld: {
-    backgroundColor: "#5a1d1d",
-    color: "#f48771",
+    backgroundColor: isLight ? "#ffebe9" : "#5a1d1d",
+    color: isLight ? "#cf222e" : "#f48771",
     textDecoration: "line-through",
+    border: isLight ? "1px solid #ff8182" : "none",
   },
   diffNew: {
-    backgroundColor: "#1e4620",
-    color: "#89d185",
+    backgroundColor: isLight ? "#dafbe1" : "#1e4620",
+    color: isLight ? "#1a7f37" : "#89d185",
+    border: isLight ? "1px solid #2da44e" : "none",
   },
   diffInsert: {
-    backgroundColor: "#1e4620",
-    color: "#89d185",
+    backgroundColor: isLight ? "#dafbe1" : "#1e4620",
+    color: isLight ? "#1a7f37" : "#89d185",
+    border: isLight ? "1px solid #2da44e" : "none",
   },
   diffDelete: {
-    backgroundColor: "#5a1d1d",
-    color: "#f48771",
+    backgroundColor: isLight ? "#ffebe9" : "#5a1d1d",
+    color: isLight ? "#cf222e" : "#f48771",
     textDecoration: "line-through",
+    border: isLight ? "1px solid #ff8182" : "none",
   },
   changeDescription: {
     fontSize: "12px",
