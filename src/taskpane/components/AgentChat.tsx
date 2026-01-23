@@ -766,6 +766,9 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
   const articleHeaderRegex = /ARTICLE\s+[A-Z]-\d+/i;
   const instructionKeywordRegex = /\b(?:Add|Delete|Substitute|Substitue|Replace|Insert|Remove|Change|Update|Modify|Include)\b/i;
   const instructionLineRegex = /^\s*(?:\.\d+|\d+\.|\d+\))?\s*(?:Add|Delete|Substitute|Substitue|Replace|Insert|Remove|Change|Update|Modify|Include)\b/i;
+  const stepPrefixRegex = /^\s*(?:\.\d+|\d+\.(?!\d)|\d+\))\s+/;
+
+  const stripStepPrefix = (value: string): string => value.replace(stepPrefixRegex, "");
 
   const splitInstructions = (text: string): { steps: string[]; headerLine?: string } => {
     const normalized = text.replace(/\r\n/g, "\n");
@@ -790,7 +793,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
     const startIndices = findStartIndices(instructionLineRegex);
 
     if (startIndices.length < 2) {
-      return { steps: [text], headerLine };
+      return { steps: [stripStepPrefix(text)], headerLine };
     }
 
     const steps = startIndices
@@ -799,7 +802,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
         const slice = workingLines.slice(start, end);
         while (slice.length > 0 && slice[0].trim() === "") slice.shift();
         while (slice.length > 0 && slice[slice.length - 1].trim() === "") slice.pop();
-        return slice.join("\n").trimEnd();
+        return stripStepPrefix(slice.join("\n").trimEnd());
       })
       .filter(step => step.trim().length > 0);
 
