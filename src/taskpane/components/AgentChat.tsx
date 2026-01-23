@@ -18,10 +18,20 @@ interface AgentChatProps {
   agent: ReturnType<typeof import("../agent/wordAgent").createWordAgent>;
 }
 
+type ChecklistStatus = "pending" | "in_progress" | "done" | "error";
+
+interface ChecklistStep {
+  id: string;
+  text: string;
+  status: ChecklistStatus;
+  error?: string;
+}
+
 interface Message {
   role: "user" | "assistant";
   content: string;
   changes?: Array<DocumentChange & { decision?: "accepted" | "rejected" }>;
+  checklist?: ChecklistStep[];
   messageId?: string;
 }
 
@@ -423,6 +433,47 @@ const createStyles = (isLight: boolean): any => ({
     lineHeight: "1.6",
     maxWidth: "400px",
   },
+  checklistContainer: {
+    border: isLight ? "1px solid #d0d7de" : "1px solid #30363d",
+    borderRadius: "8px",
+    padding: "8px 10px",
+    backgroundColor: isLight ? "#ffffff" : "#0f141a",
+    display: "flex",
+    flexDirection: "column",
+    gap: "6px",
+  },
+  checklistHeader: {
+    fontSize: "10px",
+    fontWeight: 700,
+    letterSpacing: "0.6px",
+    textTransform: "uppercase",
+    color: isLight ? "#57606a" : "#8b949e",
+  },
+  checklistItem: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: "8px",
+  },
+  checklistIcon: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "16px",
+    height: "16px",
+    marginTop: "2px",
+    flexShrink: 0,
+  },
+  checklistPendingDot: {
+    width: "8px",
+    height: "8px",
+    borderRadius: "50%",
+    backgroundColor: isLight ? "#8c959f" : "#6e7681",
+  },
+  checklistText: {
+    fontSize: "12px",
+    lineHeight: "1.4",
+    whiteSpace: "pre-wrap",
+  },
   changeBlock: {
     border: isLight ? "1px solid #d0d7de" : "1px solid #30363d",
     borderRadius: "8px",
@@ -712,6 +763,66 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
     textarea.style.overflowY = scrollHeight > maxHeightPx ? "auto" : "hidden";
   }, []);
 
+  const articleHeaderRegex = /ARTICLE\s+[A-Z]-\d+/i;
+  const stepMarkerRegex = /^\s*(?:\.\d+|\d+\.|\d+\)|[-*•])\s+/;
+  const actionLineRegex = /^\s*(?:Add|Delete|Substitute|Replace|Insert|Remove|Change|Update|Modify)\b/i;
+
+  const splitInstructions = (text: string): { steps: string[]; headerLine?: string } => {
+    const normalized = text.replace(/\r\n/g, "\n");
+    const lines = normalized.split("\n");
+    const headerIndex = lines.findIndex(line => articleHeaderRegex.test(line));
+    const headerLine = headerIndex >= 0 ? lines[headerIndex].trim() : undefined;
+    const workingLines = [...lines];
+    if (headerIndex >= 0) {
+      workingLines[headerIndex] = "";
+    }
+
+    const findStartIndices = (regex: RegExp) => {
+      const indices: number[] = [];
+      for (let i = 0; i < workingLines.length; i += 1) {
+        if (regex.test(workingLines[i])) {
+          indices.push(i);
+        }
+      }
+      return indices;
+    };
+
+    let startIndices = findStartIndices(stepMarkerRegex);
+    if (startIndices.length < 2) {
+      startIndices = findStartIndices(actionLineRegex);
+    }
+
+    if (startIndices.length < 2) {
+      return { steps: [text], headerLine };
+    }
+
+    const steps = startIndices
+      .map((start, idx) => {
+        const end = idx + 1 < startIndices.length ? startIndices[idx + 1] : workingLines.length;
+        const slice = workingLines.slice(start, end);
+        while (slice.length > 0 && slice[0].trim() === "") slice.shift();
+        while (slice.length > 0 && slice[slice.length - 1].trim() === "") slice.pop();
+        return slice.join("\n").trimEnd();
+      })
+      .filter(step => step.trim().length > 0);
+
+    return { steps: steps.length > 0 ? steps : [text], headerLine };
+  };
+
+  const isArticleInstruction = (text: string): boolean => articleHeaderRegex.test(text);
+  const isArticleEditInstruction = (text: string): boolean =>
+    isArticleInstruction(text) && /(?:Add|Delete|Substitute|Replace|Insert|Remove|Change|Update|Modify)\b/i.test(text);
+
+  const updateChecklistStep = (messageId: string, stepId: string, updates: Partial<ChecklistStep>) => {
+    setMessages(prev =>
+      prev.map(msg => {
+        if (msg.messageId !== messageId || !msg.checklist) return msg;
+        const nextChecklist = msg.checklist.map(step => (step.id === stepId ? { ...step, ...updates } : step));
+        return { ...msg, checklist: nextChecklist };
+      })
+    );
+  };
+
   // Set up change tracking callback for the tools
   useEffect(() => {
     const trackChange = async (change: DocumentChange) => {
@@ -803,21 +914,112 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
           }
           : agent;
 
-      // HYBRID PATH: Algorithm for parsing/finding, minimal AI for insertion
-      // Match ARTICLE X-Y where X is any letter and Y is any number (e.g., A-1, X-67)
-      // Also match instructions that start with article name followed by edits
-      const hasArticleInstructions = /ARTICLE\s+[A-Z]-\d+/i.test(userMessage) && (/\.\d+\s+(Add|Delete|Substitute|Replace)/i.test(userMessage) || /\.\d+\s+[A-Z]/i.test(userMessage));
+      const { steps, headerLine } = splitInstructions(userMessage);
+      const isMultiStep = steps.length > 1;
+
+      if (isMultiStep) {
+        const checklistMessageId = `msg-${messageIdCounter.current++}`;
+        const checklistSteps: ChecklistStep[] = steps.map((step, index) => ({
+          id: `step-${checklistMessageId}-${index}`,
+          text: step.trim(),
+          status: "pending",
+        }));
+
+        setMessages([
+          ...newMessages,
+          {
+            role: "assistant",
+            content: `Plan: ${checklistSteps.length} step(s).`,
+            checklist: checklistSteps,
+            messageId: checklistMessageId,
+          },
+        ]);
+
+        for (let i = 0; i < checklistSteps.length; i += 1) {
+          const step = checklistSteps[i];
+          updateChecklistStep(checklistMessageId, step.id, { status: "in_progress" });
+          currentMessageChangesRef.current = [];
+
+          const stepInstruction = headerLine && !isArticleInstruction(steps[i])
+            ? `${headerLine}\n${steps[i]}`
+            : steps[i];
+          const shouldUseHybrid = mode === "edit" && isArticleEditInstruction(stepInstruction);
+
+          try {
+            let response: string;
+            let hybridSucceeded: boolean | null = null;
+            let hybridError: string | undefined;
+
+            if (shouldUseHybrid) {
+              const result = await executeArticleInstructionsHybrid(stepInstruction, agent.apiKey, agent.model);
+              hybridSucceeded = result.success;
+              hybridError = result.error;
+              response = result.success ? "" : `Error: ${result.error || "Unknown error"}`;
+            } else {
+              response = await generateAgentResponse(askOnlyAgent, stepInstruction);
+            }
+
+            const stepChanges = [...currentMessageChangesRef.current];
+            let stepContent = response;
+            if (shouldUseHybrid) {
+              if (!hybridSucceeded) {
+                stepContent = `Error: ${hybridError || "Unknown error"}`;
+              } else if (stepChanges.length === 0) {
+                stepContent = "No changes were necessary.";
+              } else {
+                stepContent = `Proposed ${stepChanges.length} change(s). Review and accept/reject below.`;
+              }
+            } else if (!stepContent) {
+              stepContent = `Step ${i + 1} complete.`;
+            }
+
+            const assistantStepMessageId = `msg-${messageIdCounter.current++}`;
+            setMessages(prev => [
+              ...prev,
+              {
+                role: "assistant",
+                content: stepContent,
+                changes: stepChanges.length > 0 ? stepChanges : undefined,
+                messageId: assistantStepMessageId,
+              },
+            ]);
+
+            updateChecklistStep(checklistMessageId, step.id, hybridSucceeded === false
+              ? { status: "error", error: hybridError }
+              : { status: "done" });
+
+            currentMessageChangesRef.current = [];
+          } catch (stepError) {
+            const errorMessage = stepError instanceof Error ? stepError.message : "An error occurred";
+            updateChecklistStep(checklistMessageId, step.id, { status: "error", error: errorMessage });
+            const assistantStepMessageId = `msg-${messageIdCounter.current++}`;
+            setMessages(prev => [
+              ...prev,
+              {
+                role: "assistant",
+                content: `Error: ${errorMessage}`,
+                messageId: assistantStepMessageId,
+              },
+            ]);
+            currentMessageChangesRef.current = [];
+            break;
+          }
+        }
+        return;
+      }
+
+      const hasArticleInstructions = mode === "edit" && isArticleEditInstruction(userMessage);
 
       let response: string;
       let hybridSucceeded: boolean | null = null;
       let hybridError: string | undefined;
-      if (hasArticleInstructions && mode === "edit") {
+      if (hasArticleInstructions) {
         // Hybrid execution: Algorithm parses/finds, AI only for final insertion (fast like Cursor)
         const result = await executeArticleInstructionsHybrid(userMessage, agent.apiKey, agent.model);
         hybridSucceeded = result.success;
         hybridError = result.error;
         // Keep the visible chat response minimal; UI will show the diffs + accept/reject.
-        response = result.success ? "" : `Error: ${result.error || 'Unknown error'}`;
+        response = result.success ? "" : `Error: ${result.error || "Unknown error"}`;
       } else {
         // Get response from agent (changes will be tracked automatically via the agent's onChange callback)
         response = await generateAgentResponse(askOnlyAgent, userMessage);
@@ -1060,6 +1262,28 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                   >
                     {message.content}
                   </div>
+
+                  {message.role === "assistant" && message.checklist && message.checklist.length > 0 && (
+                    <div className={styles.checklistContainer}>
+                      <div className={styles.checklistHeader}>Checklist</div>
+                      {message.checklist.map((step) => (
+                        <div key={step.id} className={styles.checklistItem}>
+                          <div className={styles.checklistIcon}>
+                            {step.status === "done" ? (
+                              <CheckmarkCircleFilled style={{ fontSize: "14px", color: "#1a7f37" }} />
+                            ) : step.status === "error" ? (
+                              <DismissCircleFilled style={{ fontSize: "14px", color: "#cf222e" }} />
+                            ) : step.status === "in_progress" ? (
+                              <Spinner size="tiny" />
+                            ) : (
+                              <span className={styles.checklistPendingDot} />
+                            )}
+                          </div>
+                          <div className={styles.checklistText}>{step.text}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   {/* Show changes inline for assistant messages */}
                   {message.role === "assistant" && message.changes && message.changes.length > 0 && (
