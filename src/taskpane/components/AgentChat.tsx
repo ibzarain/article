@@ -128,7 +128,7 @@ const useStyles = makeStyles({
   },
   textarea: {
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
-    fontSize: "12px",
+    fontSize: "13px",
     backgroundColor: "transparent",
     color: "#c9d1d9",
     border: "none",
@@ -194,8 +194,8 @@ const useStyles = makeStyles({
     position: "relative",
     display: "flex",
     alignItems: "center",
-    height: "24px",
-    borderRadius: "6px",
+    height: "20px",
+    borderRadius: "4px",
     backgroundColor: "#21262d",
     border: "1px solid #30363d",
     color: "#c9d1d9",
@@ -221,15 +221,15 @@ const useStyles = makeStyles({
     backgroundColor: "transparent",
     color: "#c9d1d9",
     border: "none",
-    fontSize: "10px",
-    fontWeight: 700,
-    letterSpacing: "0.2px",
+    fontSize: "9px",
+    fontWeight: 600,
+    letterSpacing: "0.1px",
     outline: "none",
     cursor: "pointer",
-    padding: "4px 6px",
+    padding: "2px 4px",
     display: "flex",
     alignItems: "center",
-    gap: "6px",
+    gap: "3px",
     minWidth: 0,
     width: "100%",
     height: "100%",
@@ -245,28 +245,28 @@ const useStyles = makeStyles({
   modeMenu: {
     position: "absolute",
     left: 0,
-    bottom: "calc(100% + 6px)",
-    minWidth: "100px",
+    bottom: "calc(100% + 4px)",
+    minWidth: "80px",
     backgroundColor: "#161b22",
     border: "1px solid #30363d",
-    borderRadius: "6px",
+    borderRadius: "4px",
     boxShadow: "0 10px 28px rgba(0,0,0,0.45)",
-    padding: "4px",
+    padding: "3px",
     zIndex: 50,
   },
   modeMenuItem: {
     width: "100%",
     display: "flex",
     alignItems: "center",
-    gap: "8px",
-    padding: "6px 8px",
-    borderRadius: "4px",
+    gap: "6px",
+    padding: "4px 6px",
+    borderRadius: "3px",
     border: "none",
     backgroundColor: "transparent",
     color: "#c9d1d9",
     cursor: "pointer",
-    fontSize: "12px",
-    fontWeight: 600,
+    fontSize: "10px",
+    fontWeight: 500,
     textAlign: "left",
     "&:hover": {
       backgroundColor: "#21262d",
@@ -616,6 +616,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
       return;
     }
 
+    const MAX_LINES = 12;
     const computed = window.getComputedStyle(textarea);
     const fontSize = parseFloat(computed.fontSize || "13");
     const rawLineHeight = computed.lineHeight || "";
@@ -631,25 +632,25 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
     const borderTop = parseFloat(computed.borderTopWidth || "0");
     const borderBottom = parseFloat(computed.borderBottomWidth || "0");
 
-    // Calculate single line height
+    // Calculate single line height and max height
     const singleLineHeight = lineHeight + paddingTop + paddingBottom + borderTop + borderBottom;
+    const maxHeightPx = lineHeight * MAX_LINES + paddingTop + paddingBottom + borderTop + borderBottom;
 
-    // Save current height to detect if we need to recalculate
-    const currentHeight = textarea.style.height;
-    
     // Temporarily set overflow to hidden and height to auto to get accurate scrollHeight
     textarea.style.overflowY = "hidden";
     textarea.style.height = "auto";
-    
+
     // Force a reflow to ensure scrollHeight is calculated
     void textarea.offsetHeight;
-    
+
     const scrollHeight = textarea.scrollHeight;
-    
-    // Set height to scrollHeight, but ensure minimum is singleLineHeight
-    const nextHeight = Math.max(singleLineHeight, scrollHeight);
+
+    // Set height to scrollHeight, but ensure minimum is singleLineHeight and cap at maxHeightPx
+    const nextHeight = Math.max(singleLineHeight, Math.min(scrollHeight, maxHeightPx));
     textarea.style.height = `${nextHeight}px`;
-    textarea.style.overflowY = "hidden";
+
+    // Only show scrollbar when content exceeds max height
+    textarea.style.overflowY = scrollHeight > maxHeightPx ? "auto" : "hidden";
   }, []);
 
   // Set up change tracking callback for the tools
@@ -1163,13 +1164,13 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                       aria-label="Mode"
                     >
                       <span className={styles.modeSelectIcon}>
-                        {mode === "edit" ? <EditRegular style={{ fontSize: "12px" }} /> : <ChatRegular style={{ fontSize: "12px" }} />}
+                        {mode === "edit" ? <EditRegular style={{ fontSize: "10px" }} /> : <ChatRegular style={{ fontSize: "10px" }} />}
                       </span>
                       <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {mode === "edit" ? "Edit" : "Ask"}
                       </span>
                       <span className={styles.modeSelectChevron}>
-                        <ChevronDownRegular style={{ fontSize: "14px" }} />
+                        <ChevronDownRegular style={{ fontSize: "11px" }} />
                       </span>
                     </button>
 
@@ -1183,7 +1184,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                             setModeMenuOpen(false);
                           }}
                         >
-                          <EditRegular style={{ fontSize: "12px", color: "#c9d1d9" }} />
+                          <EditRegular style={{ fontSize: "10px", color: "#c9d1d9" }} />
                           <span>Edit</span>
                         </button>
 
@@ -1195,7 +1196,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                             setModeMenuOpen(false);
                           }}
                         >
-                          <ChatRegular style={{ fontSize: "12px", color: "#c9d1d9" }} />
+                          <ChatRegular style={{ fontSize: "10px", color: "#c9d1d9" }} />
                           <span>Ask</span>
                         </button>
                       </div>
