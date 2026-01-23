@@ -245,23 +245,22 @@ const useStyles = makeStyles({
     position: "absolute",
     left: 0,
     bottom: "calc(100% + 6px)",
-    minWidth: "150px",
+    minWidth: "100px",
     backgroundColor: "#161b22",
     border: "1px solid #30363d",
-    borderRadius: "8px",
+    borderRadius: "6px",
     boxShadow: "0 10px 28px rgba(0,0,0,0.45)",
-    padding: "6px",
+    padding: "4px",
     zIndex: 50,
   },
   modeMenuItem: {
     width: "100%",
     display: "flex",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: "10px",
-    padding: "8px 10px",
-    borderRadius: "6px",
-    border: "1px solid transparent",
+    gap: "8px",
+    padding: "6px 8px",
+    borderRadius: "4px",
+    border: "none",
     backgroundColor: "transparent",
     color: "#c9d1d9",
     cursor: "pointer",
@@ -270,40 +269,17 @@ const useStyles = makeStyles({
     textAlign: "left",
     "&:hover": {
       backgroundColor: "#21262d",
-      borderColor: "#30363d",
     } as any,
     "&:focus": {
       outline: "none",
-      borderColor: "#1f6feb",
-      boxShadow: "0 0 0 2px rgba(31, 111, 235, 0.15)",
+      backgroundColor: "#21262d",
     } as any,
   },
   modeMenuItemActive: {
-    backgroundColor: "rgba(31, 111, 235, 0.18)",
-    border: "1px solid rgba(31, 111, 235, 0.35)",
-  },
-  modeMenuItemLeft: {
-    display: "flex",
-    alignItems: "center",
-    gap: "10px",
-    minWidth: 0,
-  },
-  modeMenuItemLabel: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "2px",
-    minWidth: 0,
-  },
-  modeMenuItemTitle: {
-    fontSize: "12px",
-    fontWeight: 700,
-    lineHeight: 1.2,
-  },
-  modeMenuItemDesc: {
-    fontSize: "11px",
-    fontWeight: 500,
-    color: "#8b949e",
-    lineHeight: 1.2,
+    backgroundColor: "rgba(31, 111, 235, 0.15)",
+    "&:hover": {
+      backgroundColor: "rgba(31, 111, 235, 0.22)",
+    } as any,
   },
   modeSelector: {
     padding: "4px 8px",
@@ -643,10 +619,13 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
     const MAX_LINES = 10;
     const computed = window.getComputedStyle(textarea);
     const fontSize = parseFloat(computed.fontSize || "13");
+    const rawLineHeight = computed.lineHeight || "";
     const lineHeight =
-      computed.lineHeight === "normal"
+      rawLineHeight === "normal"
         ? fontSize * 1.5
-        : parseFloat(computed.lineHeight || `${fontSize * 1.5}`);
+        : /^[0-9.]+$/.test(rawLineHeight)
+          ? fontSize * parseFloat(rawLineHeight)
+          : parseFloat(rawLineHeight || `${fontSize * 1.5}`);
 
     const paddingTop = parseFloat(computed.paddingTop || "0");
     const paddingBottom = parseFloat(computed.paddingBottom || "0");
@@ -1208,14 +1187,8 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                             setModeMenuOpen(false);
                           }}
                         >
-                          <span className={styles.modeMenuItemLeft}>
-                            <EditRegular style={{ fontSize: "14px", color: "#c9d1d9" }} />
-                            <span className={styles.modeMenuItemLabel}>
-                              <span className={styles.modeMenuItemTitle}>Edit</span>
-                              <span className={styles.modeMenuItemDesc}>Make changes in the document</span>
-                            </span>
-                          </span>
-                          {mode === "edit" && <CheckmarkCircleFilled style={{ fontSize: "14px", color: "#2ea043" }} />}
+                          <EditRegular style={{ fontSize: "12px", color: "#c9d1d9" }} />
+                          <span>Edit</span>
                         </button>
 
                         <button
@@ -1226,14 +1199,8 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                             setModeMenuOpen(false);
                           }}
                         >
-                          <span className={styles.modeMenuItemLeft}>
-                            <ChatRegular style={{ fontSize: "14px", color: "#c9d1d9" }} />
-                            <span className={styles.modeMenuItemLabel}>
-                              <span className={styles.modeMenuItemTitle}>Ask</span>
-                              <span className={styles.modeMenuItemDesc}>Chat without editing</span>
-                            </span>
-                          </span>
-                          {mode === "ask" && <CheckmarkCircleFilled style={{ fontSize: "14px", color: "#2ea043" }} />}
+                          <ChatRegular style={{ fontSize: "12px", color: "#c9d1d9" }} />
+                          <span>Ask</span>
                         </button>
                       </div>
                     )}
