@@ -5,7 +5,7 @@ import {
   makeStyles,
   Spinner,
 } from "@fluentui/react-components";
-import { SparkleFilled, CheckmarkCircleFilled, DismissCircleFilled, ArrowUpRegular, EditRegular, ChatRegular, ChevronDownRegular } from "@fluentui/react-icons";
+import { DocumentRegular, CheckmarkCircleFilled, DismissCircleFilled, ArrowUpRegular, EditRegular, ChatRegular, ChevronDownRegular } from "@fluentui/react-icons";
 import { generateAgentResponse } from "../agent/wordAgent";
 import { createChangeTracker } from "../utils/changeTracker";
 import { DocumentChange, ChangeTracking } from "../types/changes";
@@ -194,8 +194,8 @@ const useStyles = makeStyles({
     position: "relative",
     display: "flex",
     alignItems: "center",
-    height: "20px",
-    borderRadius: "4px",
+    height: "24px",
+    borderRadius: "6px",
     backgroundColor: "#21262d",
     border: "1px solid #30363d",
     color: "#c9d1d9",
@@ -221,15 +221,15 @@ const useStyles = makeStyles({
     backgroundColor: "transparent",
     color: "#c9d1d9",
     border: "none",
-    fontSize: "9px",
-    fontWeight: 600,
-    letterSpacing: "0.1px",
+    fontSize: "10px",
+    fontWeight: 700,
+    letterSpacing: "0.2px",
     outline: "none",
     cursor: "pointer",
-    padding: "2px 4px",
+    padding: "4px 6px",
     display: "flex",
     alignItems: "center",
-    gap: "3px",
+    gap: "6px",
     minWidth: 0,
     width: "100%",
     height: "100%",
@@ -245,28 +245,28 @@ const useStyles = makeStyles({
   modeMenu: {
     position: "absolute",
     left: 0,
-    bottom: "calc(100% + 4px)",
-    minWidth: "80px",
+    bottom: "calc(100% + 6px)",
+    minWidth: "100px",
     backgroundColor: "#161b22",
     border: "1px solid #30363d",
-    borderRadius: "4px",
+    borderRadius: "6px",
     boxShadow: "0 10px 28px rgba(0,0,0,0.45)",
-    padding: "3px",
+    padding: "4px",
     zIndex: 50,
   },
   modeMenuItem: {
     width: "100%",
     display: "flex",
     alignItems: "center",
-    gap: "6px",
-    padding: "4px 6px",
-    borderRadius: "3px",
+    gap: "8px",
+    padding: "6px 8px",
+    borderRadius: "4px",
     border: "none",
     backgroundColor: "transparent",
     color: "#c9d1d9",
     cursor: "pointer",
-    fontSize: "10px",
-    fontWeight: 500,
+    fontSize: "12px",
+    fontWeight: 600,
     textAlign: "left",
     "&:hover": {
       backgroundColor: "#21262d",
@@ -309,13 +309,13 @@ const useStyles = makeStyles({
     } as any,
   },
   sendButton: {
-    width: "24px",
-    height: "24px",
-    minWidth: "24px",
+    width: "20px",
+    height: "20px",
+    minWidth: "20px",
     backgroundColor: "#1f6feb",
     color: "#ffffff",
     border: "none",
-    borderRadius: "5px",
+    borderRadius: "4px",
     fontSize: "12px",
     fontWeight: "500",
     cursor: "pointer",
@@ -339,9 +339,9 @@ const useStyles = makeStyles({
     },
   },
   bulkButton: {
-    padding: "4px 8px",
-    fontSize: "10px",
-    borderRadius: "5px",
+    padding: "3px 6px",
+    fontSize: "9px",
+    borderRadius: "4px",
     border: "1px solid rgba(46, 160, 67, 0.35)",
     backgroundColor: "rgba(46, 160, 67, 0.18)",
     color: "#89d185",
@@ -349,7 +349,7 @@ const useStyles = makeStyles({
     fontWeight: "500",
     transition: "background 0.15s ease",
     whiteSpace: "nowrap",
-    height: "24px",
+    height: "20px",
     display: "flex",
     alignItems: "center",
     pointerEvents: "auto",
@@ -961,16 +961,21 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
         <div className={styles.messagesContainer}>
           {messages.length === 0 ? (
             <div className={styles.emptyState}>
-              <SparkleFilled className={styles.emptyStateIcon} />
+              <DocumentRegular className={styles.emptyStateIcon} />
               <div className={styles.emptyStateText}>
                 <strong style={{ color: "#f0f6fc", fontSize: "18px", marginBottom: "12px", display: "block", fontWeight: "600" }}>
-                  AI Document Editor
+                  Amico Article
                 </strong>
-                Ask me to edit your Word document! I can read, edit, insert, delete, and format text.
+                Edit your Word document with natural language commands. Make changes, format text, and manage content efficiently.
                 <br />
                 <br />
                 <span style={{ color: "#8b949e", fontSize: "13px" }}>
-                  Try: "Make the first paragraph bold" or "Replace 'hello' with 'hi'"
+                  <div style={{ marginTop: "8px" }}>
+                    • Make first paragraph bold<br />
+                    • Replace 'hello' with 'hi'<br />
+                    • Delete second sentence<br />
+                    • Insert text after paragraph 3
+                  </div>
                 </span>
               </div>
             </div>
@@ -1103,7 +1108,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
           {isLoading && (
             <div className={styles.thinking}>
               <Spinner size="tiny" />
-              <span>Thinking and editing...</span>
+              <span>Processing...</span>
             </div>
           )}
           <div ref={messagesEndRef} />
@@ -1142,7 +1147,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                     handleSend();
                   }
                 }}
-                placeholder={mode === "edit" ? "Ask me to edit your document..." : "Ask me a question..."}
+                placeholder={mode === "edit" ? "Describe the changes you want to make..." : "Ask a question..."}
                 disabled={isLoading}
                 rows={1}
                 spellCheck={false}
@@ -1164,13 +1169,13 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                       aria-label="Mode"
                     >
                       <span className={styles.modeSelectIcon}>
-                        {mode === "edit" ? <EditRegular style={{ fontSize: "10px" }} /> : <ChatRegular style={{ fontSize: "10px" }} />}
+                        {mode === "edit" ? <EditRegular style={{ fontSize: "12px" }} /> : <ChatRegular style={{ fontSize: "12px" }} />}
                       </span>
                       <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {mode === "edit" ? "Edit" : "Ask"}
                       </span>
                       <span className={styles.modeSelectChevron}>
-                        <ChevronDownRegular style={{ fontSize: "11px" }} />
+                        <ChevronDownRegular style={{ fontSize: "14px" }} />
                       </span>
                     </button>
 
@@ -1184,7 +1189,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                             setModeMenuOpen(false);
                           }}
                         >
-                          <EditRegular style={{ fontSize: "10px", color: "#c9d1d9" }} />
+                          <EditRegular style={{ fontSize: "12px", color: "#c9d1d9" }} />
                           <span>Edit</span>
                         </button>
 
@@ -1196,7 +1201,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                             setModeMenuOpen(false);
                           }}
                         >
-                          <ChatRegular style={{ fontSize: "10px", color: "#c9d1d9" }} />
+                          <ChatRegular style={{ fontSize: "12px", color: "#c9d1d9" }} />
                           <span>Ask</span>
                         </button>
                       </div>
@@ -1236,7 +1241,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                     {isLoading ? (
                       <Spinner size="tiny" />
                     ) : (
-                      <ArrowUpRegular style={{ fontSize: "14px" }} />
+                      <ArrowUpRegular style={{ fontSize: "12px" }} />
                     )}
                   </button>
                 </div>
