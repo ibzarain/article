@@ -51,6 +51,8 @@ const useStyles = makeStyles({
     overflowY: "auto",
     overflowX: "hidden",
     padding: "20px 24px",
+    paddingBottom: "12px",
+    marginBottom: "1px",
     scrollbarWidth: "thin",
     scrollbarColor: "#30363d #0d1117",
     "&::-webkit-scrollbar": {
@@ -103,9 +105,13 @@ const useStyles = makeStyles({
   },
   inputContainer: {
     padding: "6px 10px",
+    paddingTop: "0px",
     borderTop: "1px solid #21262d",
     backgroundColor: "#0d1117",
     flexShrink: 0,
+    position: "relative",
+    zIndex: 2,
+    marginTop: "-1px",
   },
   inputRow: {
     position: "relative",
@@ -128,9 +134,6 @@ const useStyles = makeStyles({
     paddingBottom: "48px",
     // Helps scroll positioning respect the toolbar lane
     scrollPaddingBottom: "48px",
-    // Reserve space for the scrollbar when supported (prevents overlay scrollbars
-    // from being covered by the bottom-right button area).
-    scrollbarGutter: "stable",
     position: "relative",
     resize: "none",
     overflowY: "auto",
