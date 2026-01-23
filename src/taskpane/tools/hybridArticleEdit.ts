@@ -77,6 +77,22 @@ function extractInstructionContext(instruction: string): string[] {
     if (subMatch[1]) tokens.push(subMatch[1]);
   }
   
+  // Extract key words from substitution text (the text that will be inserted)
+  // Pattern: "substitute [as follows|the following]: [text]"
+  const substituteTextPattern = /substitute[^:]*:\s*(.+?)(?:\n|$)/gi;
+  let subTextMatch;
+  while ((subTextMatch = substituteTextPattern.exec(instruction)) !== null) {
+    if (subTextMatch[1]) {
+      const subText = subTextMatch[1].trim();
+      // Extract key phrases (3+ words) and important words (4+ chars) from substitution text
+      const words = subText.split(/\s+/).filter(w => w.length >= 4);
+      tokens.push(...words);
+      // Extract key phrases (e.g., "except as expressly provided", "Contract Documents")
+      const phrases = subText.match(/\b\w{4,}(?:\s+\w{4,}){1,2}\b/g) || [];
+      tokens.push(...phrases);
+    }
+  }
+  
   // Extract key phrases from common instruction patterns
   // "Article A-1" or "A-1" references
   const articleRef = instruction.match(/\b([A-Z]-\d+)\b/gi) || [];
@@ -91,22 +107,145 @@ function extractInstructionContext(instruction: string): string[] {
 }
 
 /**
+ * Uses AI to semantically find relevant text chunks in the article
+ */
+async function findSemanticMatches(
+  query: string,
+  articleText: string,
+  apiKey: string,
+  model: string,
+  contextChars: number,
+  maxMatches?: number
+): Promise<Array<{
+  matchText: string;
+  snippet: string;
+  matchStart: number;
+  matchEnd: number;
+  snippetStart: number;
+  snippetEnd: number;
+}>> {
+  // Split article into semantic chunks (paragraphs or sentences)
+  const chunks: Array<{ text: string; start: number; end: number }> = [];
+  const paragraphs = articleText.split(/\n\s*\n|\r\n\s*\r\n/);
+  let currentPos = 0;
+  
+  for (const para of paragraphs) {
+    if (para.trim().length > 0) {
+      const start = currentPos;
+      const end = start + para.length;
+      chunks.push({ text: para.trim(), start, end });
+      currentPos = end + (articleText.substring(end).match(/^\s*\n/) || [''])[0].length;
+    } else {
+      currentPos += para.length + 1;
+    }
+  }
+  
+  // If no paragraphs, split by sentences
+  if (chunks.length === 0) {
+    const sentences = articleText.split(/(?<=[.!?])\s+/);
+    currentPos = 0;
+    for (const sent of sentences) {
+      if (sent.trim().length > 10) {
+        const start = currentPos;
+        const end = start + sent.length;
+        chunks.push({ text: sent.trim(), start, end });
+        currentPos = end + 1;
+      } else {
+        currentPos += sent.length + 1;
+      }
+    }
+  }
+  
+  // Use AI to score each chunk's relevance to the query
+  const scoringPrompt = `You are a text search assistant. Given a search query and a list of text chunks from a document, identify which chunks are semantically relevant to the query.
+
+Query: "${query}"
+
+Text chunks:
+${chunks.map((chunk, i) => `[${i}] ${chunk.text.substring(0, 200)}${chunk.text.length > 200 ? '...' : ''}`).join('\n\n')}
+
+Return a JSON array of chunk indices (0-based) that are semantically relevant to the query, ordered by relevance (most relevant first). Only include chunks that are actually relevant. Format: [0, 3, 5]`;
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: [
+          { role: 'system', content: 'You are a helpful assistant that identifies semantically relevant text chunks. Return only a JSON array of indices.' },
+          { role: 'user', content: scoringPrompt },
+        ],
+        temperature: 0.1,
+        max_tokens: 100,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices[0]?.message?.content || '[]';
+    const relevantIndices: number[] = JSON.parse(content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim());
+    
+    // Build matches from relevant chunks
+    const matches: Array<{
+      matchText: string;
+      snippet: string;
+      matchStart: number;
+      matchEnd: number;
+      snippetStart: number;
+      snippetEnd: number;
+    }> = [];
+    
+    for (const idx of relevantIndices.slice(0, maxMatches || 20)) {
+      if (idx >= 0 && idx < chunks.length) {
+        const chunk = chunks[idx];
+        const snippetStart = Math.max(0, chunk.start - contextChars);
+        const snippetEnd = Math.min(articleText.length, chunk.end + contextChars);
+        
+        matches.push({
+          matchText: chunk.text,
+          snippet: articleText.slice(snippetStart, snippetEnd),
+          matchStart: chunk.start,
+          matchEnd: chunk.end,
+          snippetStart,
+          snippetEnd,
+        });
+      }
+    }
+    
+    return matches;
+  } catch (error) {
+    console.error('Error in semantic search:', error);
+    // Fallback: return empty matches
+    return [];
+  }
+}
+
+/**
  * Creates a scoped readDocument tool that only reads content within article boundaries
- * This is a proper search tool that returns matches with context snippets
+ * Uses AI semantic search instead of regex
  */
 function createScopedReadDocumentTool(
   articleBoundaries: ArticleBoundaries,
   readState: ScopedReadState,
-  readGuard: ScopedReadGuard
+  readGuard: ScopedReadGuard,
+  apiKey: string,
+  model: string
 ) {
   return {
-    description: 'Search ARTICLE content for a query and return contextual snippets around each match. This is a SEARCH tool - use it to find exact text before editing. Returns matches with snippets showing context. If query is "*" or "all", returns the full article content.',
+    description: 'Search ARTICLE content using AI semantic search. This tool uses AI to find semantically relevant text chunks matching your query, not exact text matching. Returns matches with snippets showing context. If query is "*" or "all", returns the full article content.',
     parameters: {
       type: 'object',
       properties: {
         query: {
           type: 'string',
-          description: 'Text to search for in the article. This is a search query - use it to find exact text before making edits. Use "*" or "all" to get the full article content.',
+          description: 'Semantic query to search for in the article. The AI will find semantically relevant text chunks. Use "*" or "all" to get the full article content.',
         },
         contextChars: {
           type: 'number',
@@ -116,23 +255,13 @@ function createScopedReadDocumentTool(
           type: 'number',
           description: 'Optional cap on number of snippets returned',
         },
-        matchCase: {
-          type: 'boolean',
-          description: 'Whether the search should be case-sensitive. Default: false',
-        },
-        matchWholeWord: {
-          type: 'boolean',
-          description: 'Whether to match whole words only. Default: false',
-        },
       },
       required: ['query'],
     },
-    execute: async ({ query, contextChars = 800, maxMatches, matchCase = false, matchWholeWord = false }: {
+    execute: async ({ query, contextChars = 800, maxMatches }: {
       query: string;
       contextChars?: number;
       maxMatches?: number;
-      matchCase?: boolean;
-      matchWholeWord?: boolean;
     }) => {
       try {
         if (readGuard.requiredTokens.length > 0) {
@@ -146,11 +275,30 @@ function createScopedReadDocumentTool(
             };
           }
           
-          // Check if query matches any required token
+          // Check if query matches any required token (with flexible matching)
           const allowed = readGuard.requiredTokens.some(token => {
             const normalizedToken = token.toLowerCase();
-            // Check if token is contained in query or query is contained in token (for partial matches)
-            return normalizedQuery.includes(normalizedToken) || normalizedToken.includes(normalizedQuery);
+            // Exact match or substring match
+            if (normalizedQuery.includes(normalizedToken) || normalizedToken.includes(normalizedQuery)) {
+              return true;
+            }
+            // For numbered paragraphs, allow variations (e.g., "1.2" matches "1.2 " or "1.2")
+            if (/^\d+\.\d+$/.test(normalizedToken)) {
+              // Allow "1.2", "1.2 ", "1.2.", etc.
+              const numberPattern = normalizedToken.replace(/\./g, '\\.');
+              const variations = [
+                new RegExp(`^${numberPattern}\\s*`), // "1.2 " or "1.2"
+                new RegExp(`${numberPattern}\\s+`), // "1.2 " followed by text
+                new RegExp(`\\b${numberPattern}\\b`), // Word boundary match
+              ];
+              return variations.some(pattern => pattern.test(normalizedQuery));
+            }
+            // For multi-word tokens, check if key words match
+            if (normalizedToken.includes(' ')) {
+              const tokenWords = normalizedToken.split(/\s+/).filter(w => w.length >= 4);
+              return tokenWords.some(word => normalizedQuery.includes(word));
+            }
+            return false;
           });
           
           if (!allowed) {
@@ -161,8 +309,8 @@ function createScopedReadDocumentTool(
           }
         }
 
-        const result = await Word.run(async (context) => {
-          // Get article range
+        // Get article text first
+        const articleTextResult = await Word.run(async (context) => {
           const paragraphs = context.document.body.paragraphs;
           context.load(paragraphs, 'items');
           await context.sync();
@@ -173,132 +321,53 @@ function createScopedReadDocumentTool(
           const endRange = endParagraph.getRange('End');
           const articleRange = startRange.expandTo(endRange);
 
-          // Get article text for regex search
           context.load(articleRange, 'text');
           await context.sync();
 
-          const text = articleRange.text || '';
-
-          // If query is "*" or "all", return full article content
-          if (query === '*' || query.toLowerCase() === 'all') {
-            console.log(`[readDocument] Returning full article content (${text.length} characters)`);
-            return {
-              matches: [{
-                matchText: 'FULL ARTICLE CONTENT',
-                snippet: text,
-                matchStart: 0,
-                matchEnd: text.length,
-                snippetStart: 0,
-                snippetEnd: text.length,
-              }],
-              totalFound: 1,
-              articleLength: text.length,
-              fullContent: text, // Add full content flag
-            };
-          }
-          const safeContextChars = Math.max(0, Math.floor(contextChars || 0));
-          const safeMaxMatches = typeof maxMatches === 'number' && maxMatches > 0 ? Math.floor(maxMatches) : undefined;
-
-          // Escape regex special characters
-          const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-          // Try multiple search patterns to handle punctuation variations
-          const searchPatterns: string[] = [];
-
-          // Original query
-          searchPatterns.push(query);
-
-          // Without trailing punctuation
-          if (/[.:;]$/.test(query)) {
-            searchPatterns.push(query.replace(/[.:;]+$/, ''));
-          }
-
-          // With punctuation added
-          if (!/[.:;]$/.test(query)) {
-            searchPatterns.push(query + ':');
-            searchPatterns.push(query + '.');
-          }
-
-          // Trimmed version
-          const trimmed = query.trim();
-          if (trimmed !== query) {
-            searchPatterns.push(trimmed);
-          }
-
-          // Remove duplicates
-          const uniquePatterns = Array.from(new Set(searchPatterns));
-
-          const matches: Array<{
-            matchText: string;
-            snippet: string;
-            matchStart: number;
-            matchEnd: number;
-            snippetStart: number;
-            snippetEnd: number;
-          }> = [];
-
-          let totalFound = 0;
-          const foundPositions = new Set<number>(); // Track positions to avoid duplicates
-
-          // Try each pattern
-          for (const patternQuery of uniquePatterns) {
-            const escapedQuery = escapeRegExp(patternQuery);
-            const pattern = matchWholeWord ? `\\b${escapedQuery}\\b` : escapedQuery;
-            const flags = matchCase ? 'g' : 'gi';
-            const regex = new RegExp(pattern, flags);
-
-            let match: RegExpExecArray | null;
-            while ((match = regex.exec(text)) !== null) {
-              // Avoid counting the same match twice
-              if (!foundPositions.has(match.index)) {
-                foundPositions.add(match.index);
-                totalFound++;
-
-                const matchStart = match.index;
-                const matchEnd = matchStart + match[0].length;
-                const snippetStart = Math.max(0, matchStart - safeContextChars);
-                const snippetEnd = Math.min(text.length, matchEnd + safeContextChars);
-
-                if (!safeMaxMatches || matches.length < safeMaxMatches) {
-                  matches.push({
-                    matchText: match[0],
-                    snippet: text.slice(snippetStart, snippetEnd),
-                    matchStart,
-                    matchEnd,
-                    snippetStart,
-                    snippetEnd,
-                  });
-                }
-              }
-            }
-          }
-
           return {
-            matches,
-            totalFound,
-            articleLength: text.length,
-            fullContent: undefined as string | undefined, // No full content for search queries
+            text: articleRange.text || '',
+            length: articleRange.text?.length || 0,
           };
-        }) as {
-          matches: Array<{
-            matchText: string;
-            snippet: string;
-            matchStart: number;
-            matchEnd: number;
-            snippetStart: number;
-            snippetEnd: number;
-          }>;
-          totalFound: number;
-          articleLength: number;
-          fullContent?: string;
-        };
+        });
 
-        // Log the result
+        const text = articleTextResult.text;
+
+        // If query is "*" or "all", return full article content
         if (query === '*' || query.toLowerCase() === 'all') {
-          console.log(`[readDocument] Full article content retrieved:`, result.fullContent);
-        } else {
-          console.log(`[readDocument] Search for "${query}" found ${result.totalFound} match(es)`);
+          console.log(`[readDocument] Returning full article content (${text.length} characters)`);
+          readState.hasFreshRead = true;
+          readState.lastQuery = query;
+          return {
+            success: true,
+            query,
+            content: [{
+              matchText: 'FULL ARTICLE CONTENT',
+              snippet: text,
+              matchStart: 0,
+              matchEnd: text.length,
+              snippetStart: 0,
+              snippetEnd: text.length,
+            }],
+            totalFound: 1,
+            articleLength: text.length,
+            fullContent: text,
+          };
         }
+
+        // Use AI semantic search instead of regex
+        const safeContextChars = Math.max(0, Math.floor(contextChars || 0));
+        const safeMaxMatches = typeof maxMatches === 'number' && maxMatches > 0 ? Math.floor(maxMatches) : undefined;
+        
+        const semanticMatches = await findSemanticMatches(
+          query,
+          text,
+          apiKey,
+          model,
+          safeContextChars,
+          safeMaxMatches
+        );
+
+        console.log(`[readDocument] Semantic search for "${query}" found ${semanticMatches.length} match(es)`);
 
         readState.hasFreshRead = true;
         readState.lastQuery = query;
@@ -306,10 +375,10 @@ function createScopedReadDocumentTool(
         return {
           success: true,
           query,
-          content: result.matches,
-          totalFound: result.totalFound,
-          articleLength: result.articleLength,
-          fullContent: result.fullContent, // Include full content in response
+          content: semanticMatches,
+          totalFound: semanticMatches.length,
+          articleLength: text.length,
+          fullContent: undefined,
         };
       } catch (error) {
         return {
@@ -1302,7 +1371,7 @@ export async function executeArticleInstructionsHybrid(
     const readState: ScopedReadState = { hasFreshRead: false };
     const requiredTokens = extractInstructionContext(instruction);
     const readGuard: ScopedReadGuard = { requiredTokens };
-    const scopedReadDocument = createScopedReadDocumentTool(articleBoundaries, readState, readGuard);
+    const scopedReadDocument = createScopedReadDocumentTool(articleBoundaries, readState, readGuard, apiKey, model);
     const scopedEditTools = createScopedEditTools(articleBoundaries, articleName, readState);
 
     // Create a scoped agent with only article content
@@ -1329,33 +1398,42 @@ AVAILABLE TOOLS:
 
 MANDATORY WORKFLOW - FOLLOW THIS EXACTLY:
 1. UNDERSTAND the user's instruction. Extract the specific content mentioned (numbered paragraphs, quoted text, key phrases).
+   - If instruction says "Delete paragraph X and substitute", you MUST complete BOTH operations: delete the existing paragraph, then insert the new content.
 
-2. ALWAYS call readDocument with content FROM THE INSTRUCTION ONLY:
-   - If instruction mentions "1.3", search for "1.3 " (with trailing space) or "1.3" followed by text
-   - If instruction mentions quoted text like "The Construction Manager shall", search for that exact phrase
-   - If instruction says "Delete paragraph 1.2", search for "1.2 " or the paragraph content starting with "1.2"
+2. ALWAYS call readDocument with content FROM THE INSTRUCTION ONLY. Try multiple search strategies if the first fails:
+   - Strategy 1: If instruction mentions "1.3" or "1.2", search for "1.3 " (with trailing space) or "1.2 " to find the paragraph label
+   - Strategy 2: If that fails, search for key words from the substitution text (e.g., if substituting "1.2 except as expressly provided", search for "except as expressly provided" or "Contract Documents")
+   - Strategy 3: If that fails, search for the paragraph number without space: "1.3" or "1.2"
+   - Strategy 4: If instruction mentions quoted text like "The Construction Manager shall", search for that exact phrase
    - DO NOT search for content not mentioned in the instruction
    - DO NOT use article preview or previous step content
    - Review the readDocument results - you MUST see matches before proceeding
    - DO NOT proceed to insert/edit until you've found the location via readDocument
+   - If one search fails, try the next strategy - DO NOT give up after one failed search
 
 3. Once readDocument returns matches:
    - Use the EXACT matchText from the results as searchText for insertText/editDocument/deleteText
    - If multiple matches, use the first one (or the one that makes sense in context)
+   - For "Delete and substitute" instructions: FIRST delete the existing paragraph, THEN insert the new content
    - Call the appropriate tool with the matchText as searchText
 
-4. CRITICAL: If readDocument doesn't find the text:
+4. CRITICAL: If readDocument doesn't find the text after trying multiple strategies:
+   - Try searching for parts of the paragraph content (e.g., if looking for "1.2", try searching for words that appear after "1.2" in the document)
    - Report what you searched for and that it wasn't found
    - DO NOT default to "beginning" or "end" - that's wrong!
    - DO NOT search for unrelated content - stick to what's in the instruction
+   - DO NOT give up - try different search strategies
 
 5. NEVER insert at "beginning" or "end" unless the user explicitly asks for that. If user says "before X", you MUST find X first via readDocument.
 
 6. Use ONE tool call at a time. Wait for the tool result before deciding the next action. NEVER reuse a prior location; always re-read before each edit.
    - Each step is independent - do NOT use locations from previous steps
    - Each edit requires a fresh readDocument call with content from the current instruction
+   - Complete ALL operations in the instruction (e.g., both delete AND substitute)
 
 7. For insertText: location "before"/"after"/"inline" requires searchText from readDocument results.
+
+8. COMPLETION: You MUST complete ALL operations mentioned in the instruction. If the instruction says "Delete X and substitute Y", you MUST do both. Do not stop after one operation.
 
 8. FINAL RESPONSE (KEEP IT MINIMAL):
    - Do NOT paste full article content.
