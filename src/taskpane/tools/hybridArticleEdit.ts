@@ -21,6 +21,76 @@ type ScopedReadGuard = {
 };
 
 /**
+ * Extracts all relevant context tokens from the instruction to lock readDocument queries
+ * Extracts numbered paragraphs, quoted strings, and key phrases mentioned in the instruction
+ */
+function extractInstructionContext(instruction: string): string[] {
+  const tokens: string[] = [];
+  
+  // Extract numbered paragraphs (e.g., "1.3", "1.2")
+  const numbered = instruction.match(/\b\d+\.\d+\b/g) || [];
+  tokens.push(...numbered);
+  
+  // Extract quoted strings (both double and single quotes)
+  const doubleQuoted = instruction.match(/"([^"]+)"/g) || [];
+  const singleQuoted = instruction.match(/'([^']+)'/g) || [];
+  [...doubleQuoted, ...singleQuoted].forEach(q => {
+    const content = q.replace(/["']/g, '').trim();
+    // Only add meaningful quoted content (at least 3 characters)
+    if (content.length >= 3) {
+      tokens.push(content);
+      // Also add key words from quoted content
+      const words = content.split(/\s+/).filter(w => w.length >= 4);
+      tokens.push(...words);
+    }
+  });
+  
+  // Extract numbered paragraphs after action words (Delete paragraph 1.3, Substitute 1.2, etc.)
+  const actionPatterns = [
+    /(?:Delete|Substitute|Replace|Insert|Add)\s+(?:paragraph\s+)?(\d+\.\d+)/gi,
+    /paragraph\s+(\d+\.\d+)/gi,
+  ];
+  actionPatterns.forEach(pattern => {
+    let match;
+    while ((match = pattern.exec(instruction)) !== null) {
+      if (match[1]) tokens.push(match[1]);
+    }
+  });
+  
+  // Extract text after "before" or "after" keywords
+  const beforeAfterPattern = /(?:before|after)\s+["']?([^"'\n]{3,})["']?/gi;
+  let match;
+  while ((match = beforeAfterPattern.exec(instruction)) !== null) {
+    if (match[1]) {
+      const text = match[1].trim();
+      tokens.push(text);
+      // Add key words from the text
+      const words = text.split(/\s+/).filter(w => w.length >= 4);
+      tokens.push(...words);
+    }
+  }
+  
+  // Extract substitution text patterns (e.g., "substitute the following: 1.3 commence...")
+  const substitutePattern = /substitute[^:]*:\s*(\d+\.\d+)/gi;
+  let subMatch;
+  while ((subMatch = substitutePattern.exec(instruction)) !== null) {
+    if (subMatch[1]) tokens.push(subMatch[1]);
+  }
+  
+  // Extract key phrases from common instruction patterns
+  // "Article A-1" or "A-1" references
+  const articleRef = instruction.match(/\b([A-Z]-\d+)\b/gi) || [];
+  tokens.push(...articleRef);
+  
+  // Normalize and deduplicate tokens
+  const normalized = tokens
+    .map(t => t.toLowerCase().trim())
+    .filter(t => t.length > 0);
+  
+  return Array.from(new Set(normalized));
+}
+
+/**
  * Creates a scoped readDocument tool that only reads content within article boundaries
  * This is a proper search tool that returns matches with context snippets
  */
@@ -66,14 +136,27 @@ function createScopedReadDocumentTool(
     }) => {
       try {
         if (readGuard.requiredTokens.length > 0) {
-          const normalizedQuery = query.toLowerCase();
-          const allowed = readGuard.requiredTokens.some(token =>
-            normalizedQuery.includes(token.toLowerCase())
-          );
+          const normalizedQuery = query.toLowerCase().trim();
+          
+          // Allow wildcard queries only if explicitly requested
+          if (query === '*' || normalizedQuery === 'all') {
+            return {
+              success: false,
+              error: `Wildcard queries ("*" or "all") are not allowed. You must search for specific content mentioned in the instruction. Allowed search terms: ${readGuard.requiredTokens.slice(0, 10).join(', ')}${readGuard.requiredTokens.length > 10 ? '...' : ''}`,
+            };
+          }
+          
+          // Check if query matches any required token
+          const allowed = readGuard.requiredTokens.some(token => {
+            const normalizedToken = token.toLowerCase();
+            // Check if token is contained in query or query is contained in token (for partial matches)
+            return normalizedQuery.includes(normalizedToken) || normalizedToken.includes(normalizedQuery);
+          });
+          
           if (!allowed) {
             return {
               success: false,
-              error: `readDocument query must include one of: ${readGuard.requiredTokens.join(', ')}`,
+              error: `readDocument query must include content from the current instruction. Your query "${query}" does not match any content mentioned in the instruction. Allowed search terms: ${readGuard.requiredTokens.slice(0, 10).join(', ')}${readGuard.requiredTokens.length > 10 ? '...' : ''}. Do NOT search for content from article preview or previous steps.`,
             };
           }
         }
@@ -237,75 +320,6 @@ function createScopedReadDocumentTool(
     },
   };
 }
-
-const buildRequiredTokens = (instruction: string): string[] => {
-  return Array.from(new Set(
-    (instruction.match(/\b\d+\.\d+\b/g) || [])
-      .map(token => token.trim())
-      .filter(Boolean)
-  ));
-};
-
-const buildArticleContentPreview = (articleContent: string, maxChars: number) => {
-  if (articleContent.length <= maxChars) {
-    return articleContent;
-  }
-  return `${articleContent.substring(0, maxChars)}...`;
-};
-
-const parsePlannerJson = (raw: string): { steps: Array<{ instruction: string }> } | null => {
-  const trimmed = raw.trim();
-  const normalized = trimmed.startsWith('```')
-    ? trimmed.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()
-    : trimmed;
-  try {
-    const parsed = JSON.parse(normalized);
-    if (parsed && Array.isArray(parsed.steps)) {
-      return parsed as { steps: Array<{ instruction: string }> };
-    }
-  } catch {
-    return null;
-  }
-  return null;
-};
-
-const planStepsWithAI = async (
-  instruction: string,
-  articleName: string,
-  articleContent: string,
-  apiKey: string,
-  model: string
-): Promise<string[]> => {
-  const contentPreview = buildArticleContentPreview(articleContent, 7000);
-  const plannerAgent = {
-    apiKey,
-    model,
-    tools: {},
-    system: `You are a planning assistant for Word document edits.
-Return JSON ONLY in this exact shape: {"steps":[{"instruction":"..."}]}.
-Rules:
-- Each step is a single actionable edit instruction.
-- Do NOT include numbering prefixes like ".1" or "1." in the instruction.
-- Keep any quoted anchors or numbered paragraph references (e.g., "1.2", "1.3") intact.
-- Do NOT invent anchors not present in the provided article content.
-- Do NOT include extra commentary, markdown, or code fences.`,
-  };
-
-  const plannerPrompt = `ARTICLE ${articleName} CONTENT (for planning):
-${contentPreview}
-
-USER INSTRUCTION:
-${instruction}`;
-
-  const response = await generateAgentResponse(plannerAgent, plannerPrompt);
-  const parsed = parsePlannerJson(response || '');
-  if (!parsed || parsed.steps.length === 0) {
-    return [instruction];
-  }
-  return parsed.steps
-    .map(step => (step.instruction || '').trim())
-    .filter(step => step.length > 0);
-};
 
 /**
  * Creates scoped editing tools that only work within article boundaries
@@ -1247,163 +1261,6 @@ function createScopedEditTools(
   };
 }
 
-async function runHybridStepWithBoundaries(
-  instruction: string,
-  apiKey: string,
-  model: string,
-  articleName: string,
-  articleBoundaries: ArticleBoundaries
-): Promise<string> {
-  const readState: ScopedReadState = { hasFreshRead: false };
-  const readGuard: ScopedReadGuard = { requiredTokens: buildRequiredTokens(instruction) };
-  const scopedReadDocument = createScopedReadDocumentTool(articleBoundaries, readState, readGuard);
-  const scopedEditTools = createScopedEditTools(articleBoundaries, articleName, readState);
-  const articleContentPreview = buildArticleContentPreview(articleBoundaries.articleContent, 2000);
-
-  const scopedAgent = {
-    apiKey,
-    model,
-    tools: {
-      readDocument: scopedReadDocument,
-      ...scopedEditTools,
-    },
-    system: `You are a helpful AI assistant that can edit Word documents. You are currently working ONLY within ARTICLE ${articleName}.
-
-IMPORTANT: You can ONLY read and edit content within ARTICLE ${articleName}. All your tools are scoped to this article only.
-
-CRITICAL: PRESERVE FORMATTING - When extracting text from the user's instruction to insert, you MUST preserve all newlines (\\n), line breaks, and indentation exactly as provided. Do NOT normalize, trim, or modify the formatting of the text to insert. The text parameter should contain the exact formatting including newline characters.
-
-CURRENT ARTICLE CONTENT (for reference):
-${articleContentPreview}
-
-AVAILABLE TOOLS:
-- readDocument: SEARCH tool - Search ARTICLE ${articleName} for a query and return contextual snippets around each match. MANDATORY: Call this BEFORE any insert/edit/delete to find the exact location text (use matchText as searchText). Do NOT call it with "*" / "all" unless the user explicitly asks to see the full article.
-- editDocument: Find and replace text within ARTICLE ${articleName} only. Requires searchText from readDocument results.
-- insertText: Insert new text within ARTICLE ${articleName} only. MANDATORY: Requires searchText from readDocument results. If user says "before X", you MUST find X via readDocument first, then use that matchText as searchText with location: "before". IMPORTANT: When extracting the text to insert from the user's instruction, preserve ALL newlines (\\n) and formatting exactly as provided. The text parameter must include newline characters where the user has line breaks.
-- deleteText: Delete text from ARTICLE ${articleName} only. Requires searchText from readDocument results.
-
-MANDATORY WORKFLOW - FOLLOW THIS EXACTLY:
-1. UNDERSTAND the user's instruction. If they say "before 'The Construction Manager shall:'", you MUST find that exact text or a close variation.
-
-2. ALWAYS call readDocument with the specific text the user specified:
-   - If user says "before 'The Construction Manager shall:'", search for "The Construction Manager shall" (with or without colon)
-   - If the user refers to numbered paragraphs like "1.2" or "1.3", search for "1.2 " or "1.3 " (with a trailing space) and prefer whole-number matches. Do NOT match sub-bullets like ".2" or ".3".
-   - If the numbered label search fails, use readDocument to capture the full paragraph lead-in (e.g., "1.2 except as expressly provided...") and use that longer lead-in as searchText.
-   - Review the readDocument results - you MUST see matches before proceeding
-   - If no matches found, try variations: "Construction Manager shall", "The Construction Manager", etc.
-   - DO NOT proceed to insert/edit until you've found the location via readDocument
-
-3. Once readDocument returns matches:
-   - Use the EXACT matchText from the results as searchText for insertText
-   - If multiple matches, use the first one (or the one that makes sense in context)
-   - Call insertText with location: "before" and the matchText as searchText
-
-4. CRITICAL: If readDocument doesn't find the text after multiple searches:
-   - Report what you searched for and that it wasn't found
-   - DO NOT default to "beginning" or "end" - that's wrong!
-   - Ask the user for clarification or an alternative search term
-
-5. NEVER insert at "beginning" or "end" unless the user explicitly asks for that. If user says "before X", you MUST find X first.
-
-6. Use ONE tool call at a time. Wait for the tool result before deciding the next action. NEVER reuse a prior location; always re-read before each edit.
-   - When a numbered paragraph is referenced (e.g., "1.3"), every readDocument query MUST include that number.
-
-7. For insertText: location "before"/"after"/"inline" requires searchText from readDocument results.
-
-8. FINAL RESPONSE (KEEP IT MINIMAL):
-   - Do NOT paste full article content.
-   - Do NOT write a detailed summary or "Changes Made".
-   - Respond with a single short sentence, e.g. "Done." or "Proposed changes below."
-
-The user has provided the following instructions for ARTICLE ${articleName}:
-${instruction}
-
-Use your AI intelligence to understand where to make the changes, then use the tools to execute them.`,
-  };
-
-  return generateAgentResponse(scopedAgent, instruction);
-}
-
-export async function planArticleInstructionsHybrid(
-  instruction: string,
-  apiKey: string,
-  model: string
-): Promise<{
-  success: boolean;
-  error?: string;
-  steps?: string[];
-  articleName?: string;
-  articleBoundaries?: ArticleBoundaries;
-}> {
-  try {
-    const articleName = parseArticleName(instruction);
-    if (!articleName) {
-      return {
-        success: false,
-        error: 'Could not parse article name from instruction. Expected format: "ARTICLE A-1" or "A-1"',
-      };
-    }
-
-    const articleBoundaries = await extractArticle(`ARTICLE ${articleName}`);
-    if (!articleBoundaries) {
-      return {
-        success: false,
-        error: `Article "${articleName}" not found in document`,
-      };
-    }
-
-    const steps = await planStepsWithAI(
-      instruction,
-      articleName,
-      articleBoundaries.articleContent,
-      apiKey,
-      model
-    );
-
-    return {
-      success: true,
-      steps,
-      articleName,
-      articleBoundaries,
-    };
-  } catch (error) {
-    console.error('Error planning article instructions:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error planning article instructions',
-    };
-  }
-}
-
-export async function executeArticleInstructionStepHybrid(
-  instruction: string,
-  apiKey: string,
-  model: string,
-  articleName: string,
-  articleBoundaries: ArticleBoundaries
-): Promise<{ success: boolean; error?: string; results?: string[] }> {
-  try {
-    const response = await runHybridStepWithBoundaries(
-      instruction,
-      apiKey,
-      model,
-      articleName,
-      articleBoundaries
-    );
-
-    return {
-      success: true,
-      results: [response],
-    };
-  } catch (error) {
-    console.error('Error executing article instruction step:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error executing article instruction step',
-    };
-  }
-}
-
 /**
  * Executes article instructions using hybrid approach:
  * 1. Extracts only the relevant article content
@@ -1441,13 +1298,79 @@ export async function executeArticleInstructionsHybrid(
     console.log(`  Content length: ${articleBoundaries.articleContent.length} characters`);
     // Intentionally do NOT log full article content (too verbose / may contain sensitive text)
 
-    const response = await runHybridStepWithBoundaries(
-      instruction,
+    // Create scoped tools that only work within the article
+    const readState: ScopedReadState = { hasFreshRead: false };
+    const requiredTokens = extractInstructionContext(instruction);
+    const readGuard: ScopedReadGuard = { requiredTokens };
+    const scopedReadDocument = createScopedReadDocumentTool(articleBoundaries, readState, readGuard);
+    const scopedEditTools = createScopedEditTools(articleBoundaries, articleName, readState);
+
+    // Create a scoped agent with only article content
+    const scopedAgent = {
       apiKey,
       model,
-      articleName,
-      articleBoundaries
-    );
+      tools: {
+        readDocument: scopedReadDocument,
+        ...scopedEditTools,
+      },
+      system: `You are a helpful AI assistant that can edit Word documents. You are currently working ONLY within ARTICLE ${articleName}.
+
+IMPORTANT: You can ONLY read and edit content within ARTICLE ${articleName}. All your tools are scoped to this article only.
+
+CRITICAL: PRESERVE FORMATTING - When extracting text from the user's instruction to insert, you MUST preserve all newlines (\\n), line breaks, and indentation exactly as provided. Do NOT normalize, trim, or modify the formatting of the text to insert. The text parameter should contain the exact formatting including newline characters.
+
+CRITICAL: INSTRUCTION-ONLY SEARCHES - You MUST ONLY search for content explicitly mentioned in the current instruction. Do NOT search for content from article previews, previous steps, or any other context. Every readDocument query MUST include content from the current instruction only.
+
+AVAILABLE TOOLS:
+- readDocument: SEARCH tool - Search ARTICLE ${articleName} for a query and return contextual snippets around each match. MANDATORY: Call this BEFORE any insert/edit/delete to find the exact location text (use matchText as searchText). CRITICAL: You can ONLY search for content explicitly mentioned in the current instruction. Wildcard queries ("*" or "all") are NOT allowed.
+- editDocument: Find and replace text within ARTICLE ${articleName} only. Requires searchText from readDocument results.
+- insertText: Insert new text within ARTICLE ${articleName} only. MANDATORY: Requires searchText from readDocument results. If user says "before X", you MUST find X via readDocument first, then use that matchText as searchText with location: "before". IMPORTANT: When extracting the text to insert from the user's instruction, preserve ALL newlines (\\n) and formatting exactly as provided. The text parameter must include newline characters where the user has line breaks.
+- deleteText: Delete text from ARTICLE ${articleName} only. Requires searchText from readDocument results.
+
+MANDATORY WORKFLOW - FOLLOW THIS EXACTLY:
+1. UNDERSTAND the user's instruction. Extract the specific content mentioned (numbered paragraphs, quoted text, key phrases).
+
+2. ALWAYS call readDocument with content FROM THE INSTRUCTION ONLY:
+   - If instruction mentions "1.3", search for "1.3 " (with trailing space) or "1.3" followed by text
+   - If instruction mentions quoted text like "The Construction Manager shall", search for that exact phrase
+   - If instruction says "Delete paragraph 1.2", search for "1.2 " or the paragraph content starting with "1.2"
+   - DO NOT search for content not mentioned in the instruction
+   - DO NOT use article preview or previous step content
+   - Review the readDocument results - you MUST see matches before proceeding
+   - DO NOT proceed to insert/edit until you've found the location via readDocument
+
+3. Once readDocument returns matches:
+   - Use the EXACT matchText from the results as searchText for insertText/editDocument/deleteText
+   - If multiple matches, use the first one (or the one that makes sense in context)
+   - Call the appropriate tool with the matchText as searchText
+
+4. CRITICAL: If readDocument doesn't find the text:
+   - Report what you searched for and that it wasn't found
+   - DO NOT default to "beginning" or "end" - that's wrong!
+   - DO NOT search for unrelated content - stick to what's in the instruction
+
+5. NEVER insert at "beginning" or "end" unless the user explicitly asks for that. If user says "before X", you MUST find X first via readDocument.
+
+6. Use ONE tool call at a time. Wait for the tool result before deciding the next action. NEVER reuse a prior location; always re-read before each edit.
+   - Each step is independent - do NOT use locations from previous steps
+   - Each edit requires a fresh readDocument call with content from the current instruction
+
+7. For insertText: location "before"/"after"/"inline" requires searchText from readDocument results.
+
+8. FINAL RESPONSE (KEEP IT MINIMAL):
+   - Do NOT paste full article content.
+   - Do NOT write a detailed summary or "Changes Made".
+   - Respond with a single short sentence, e.g. "Done." or "Proposed changes below."
+
+The user has provided the following instructions for ARTICLE ${articleName}:
+${instruction}
+
+Use your AI intelligence to understand where to make the changes, then use the tools to execute them.`,
+    };
+
+    // Generate response using the scoped agent
+    // The agent will only see and work with the article content
+    const response = await generateAgentResponse(scopedAgent, instruction);
 
     return {
       success: true,
