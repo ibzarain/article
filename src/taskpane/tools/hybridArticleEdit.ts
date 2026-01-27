@@ -26,11 +26,11 @@ type ScopedReadGuard = {
  */
 function extractInstructionContext(instruction: string): string[] {
   const tokens: string[] = [];
-  
+
   // Extract numbered paragraphs (e.g., "1.3", "1.2")
   const numbered = instruction.match(/\b\d+\.\d+\b/g) || [];
   tokens.push(...numbered);
-  
+
   // Extract quoted strings (both double and single quotes)
   const doubleQuoted = instruction.match(/"([^"]+)"/g) || [];
   const singleQuoted = instruction.match(/'([^']+)'/g) || [];
@@ -44,7 +44,7 @@ function extractInstructionContext(instruction: string): string[] {
       tokens.push(...words);
     }
   });
-  
+
   // Extract numbered paragraphs after action words (Delete paragraph 1.3, Substitute 1.2, etc.)
   const actionPatterns = [
     /(?:Delete|Substitute|Replace|Insert|Add)\s+(?:paragraph\s+)?(\d+\.\d+)/gi,
@@ -56,7 +56,7 @@ function extractInstructionContext(instruction: string): string[] {
       if (match[1]) tokens.push(match[1]);
     }
   });
-  
+
   // Extract text after "before" or "after" keywords
   const beforeAfterPattern = /(?:before|after)\s+["']?([^"'\n]{3,})["']?/gi;
   let match;
@@ -69,14 +69,14 @@ function extractInstructionContext(instruction: string): string[] {
       tokens.push(...words);
     }
   }
-  
+
   // Extract substitution text patterns (e.g., "substitute the following: 1.3 commence...")
   const substitutePattern = /substitute[^:]*:\s*(\d+\.\d+)/gi;
   let subMatch;
   while ((subMatch = substitutePattern.exec(instruction)) !== null) {
     if (subMatch[1]) tokens.push(subMatch[1]);
   }
-  
+
   // Extract key words from substitution text (the text that will be inserted)
   // Pattern: "substitute [as follows|the following]: [text]"
   const substituteTextPattern = /substitute[^:]*:\s*(.+?)(?:\n|$)/gi;
@@ -92,17 +92,17 @@ function extractInstructionContext(instruction: string): string[] {
       tokens.push(...phrases);
     }
   }
-  
+
   // Extract key phrases from common instruction patterns
   // "Article A-1" or "A-1" references
   const articleRef = instruction.match(/\b([A-Z]-\d+)\b/gi) || [];
   tokens.push(...articleRef);
-  
+
   // Normalize and deduplicate tokens
   const normalized = tokens
     .map(t => t.toLowerCase().trim())
     .filter(t => t.length > 0);
-  
+
   return Array.from(new Set(normalized));
 }
 
@@ -254,7 +254,7 @@ function createScopedReadDocumentTool(
       try {
         if (readGuard.requiredTokens.length > 0) {
           const normalizedQuery = query.toLowerCase().trim();
-          
+
           // Allow wildcard queries only if explicitly requested
           if (query === '*' || normalizedQuery === 'all') {
             return {
@@ -262,7 +262,7 @@ function createScopedReadDocumentTool(
               error: `Wildcard queries ("*" or "all") are not allowed. You must search for specific content mentioned in the instruction. Allowed search terms: ${readGuard.requiredTokens.slice(0, 10).join(', ')}${readGuard.requiredTokens.length > 10 ? '...' : ''}`,
             };
           }
-          
+
           // Check if query matches any required token (with flexible matching)
           const allowed = readGuard.requiredTokens.some(token => {
             const normalizedToken = token.toLowerCase();
@@ -288,7 +288,7 @@ function createScopedReadDocumentTool(
             }
             return false;
           });
-          
+
           if (!allowed) {
             return {
               success: false,
@@ -507,11 +507,11 @@ function createScopedEditTools(
 
   return {
     editDocument: {
-      description: 'Edit or replace text in the article. Automatically preserves all formatting. Only edits within the current article section.',
+      description: 'Edit or replace text in the article. For numbered sections (e.g., "1.2"), replaces the ENTIRE section including all content until the next sibling section. Automatically preserves all formatting. Only edits within the current article section.',
       parameters: {
         type: 'object',
         properties: {
-          searchText: { type: 'string', description: 'The text to find and replace in the article' },
+          searchText: { type: 'string', description: 'The text to find and replace in the article. For numbered paragraphs like "1.2", replaces the entire section (all content until the next sibling like "1.3" or parent like "2.")' },
           newText: { type: 'string', description: 'The new text to replace the found text with' },
           replaceAll: { type: 'boolean', description: 'If true, replaces all occurrences. If false, replaces only the first occurrence.' },
           matchCase: { type: 'boolean', description: 'Whether the search should be case-sensitive' },
@@ -526,6 +526,56 @@ function createScopedEditTools(
           const labelOnly = isNumberedParagraphLabel(searchText);
           const label = extractNumberedLabel(searchText);
           const shouldMatchWholeWord = typeof matchWholeWord === 'boolean' ? matchWholeWord : labelOnly;
+
+          /**
+           * Helper: Parse a numbered label like "1.2" or "1.2.3" into its numeric parts.
+           * Returns array like [1, 2] for "1.2" or [1, 2, 3] for "1.2.3"
+           */
+          const parseLabelParts = (lbl: string): number[] => {
+            return lbl.split('.').map(p => parseInt(p, 10)).filter(n => !isNaN(n));
+          };
+
+          /**
+           * Helper: Check if a label represents a sibling or ancestor of the target label.
+           * For target "1.2": siblings are "1.3", "1.4", etc.; ancestors are "2.", "3.", etc.
+           * For target "1.2.3": siblings are "1.2.4", "1.2.5"; ancestors are "1.3", "2.", etc.
+           */
+          const isSiblingOrAncestor = (targetParts: number[], candidateParts: number[]): boolean => {
+            if (candidateParts.length === 0) return false;
+
+            // Check if candidate is at same level or higher (fewer parts = higher level)
+            if (candidateParts.length < targetParts.length) {
+              // Candidate is at higher level (e.g., target is 1.2.3, candidate is 1.3 or 2.)
+              // Check if it's the same parent path or a later one
+              for (let i = 0; i < candidateParts.length - 1; i++) {
+                if (candidateParts[i] < targetParts[i]) return false;
+                if (candidateParts[i] > targetParts[i]) return true;
+              }
+              // Same parent prefix, check if last part is greater
+              const lastIdx = candidateParts.length - 1;
+              return candidateParts[lastIdx] > targetParts[lastIdx];
+            }
+
+            if (candidateParts.length === targetParts.length) {
+              // Same level - check if it's a later sibling
+              for (let i = 0; i < candidateParts.length - 1; i++) {
+                if (candidateParts[i] !== targetParts[i]) {
+                  // Different parent path - only count if greater
+                  return candidateParts[i] > targetParts[i];
+                }
+              }
+              // Same parent, compare last part
+              return candidateParts[candidateParts.length - 1] > targetParts[targetParts.length - 1];
+            }
+
+            // Candidate has more parts (deeper nesting) - not a sibling/ancestor
+            // Unless it's under a different parent that comes after
+            for (let i = 0; i < targetParts.length; i++) {
+              if (candidateParts[i] < targetParts[i]) return false;
+              if (candidateParts[i] > targetParts[i]) return true;
+            }
+            return false;
+          };
 
           // Locate target text but DO NOT mutate the document yet.
           // We render a proposed inline diff (red old + green new) and only finalize on Accept.
@@ -545,6 +595,8 @@ function createScopedEditTools(
               const startIdx = articleBoundaries.startParagraphIndex;
               const endIdx = articleBoundaries.endParagraphIndex;
               const slice = paragraphs.items.slice(startIdx, endIdx + 1);
+
+              // Load all paragraph data including list info
               for (const p of slice) {
                 context.load(p, 'text');
                 const listItem = (p as any).listItemOrNullObject ? (p as any).listItemOrNullObject : (p as any).listItem;
@@ -552,47 +604,108 @@ function createScopedEditTools(
               }
               await context.sync();
 
-              let targetIndex: number | null = null;
-              let targetParagraph: Word.Paragraph | null = null;
-              let isListItem = false;
+              // Build array of paragraph info for analysis
+              const paragraphInfos: Array<{
+                index: number;
+                text: string;
+                listString: string;
+                paragraph: Word.Paragraph;
+              }> = [];
 
               for (let i = startIdx; i <= endIdx; i++) {
                 const p = paragraphs.items[i];
                 const listItem = (p as any).listItemOrNullObject ? (p as any).listItemOrNullObject : (p as any).listItem;
                 const listString = listItem && !(listItem as any).isNullObject ? ((listItem as any).listString || '') : '';
-                if ((listString || '').trim() === label) {
-                  targetIndex = i;
-                  targetParagraph = p;
+                paragraphInfos.push({
+                  index: i,
+                  text: p.text || '',
+                  listString: listString.trim(),
+                  paragraph: p,
+                });
+              }
+
+              // Find the starting paragraph with the target label
+              let targetStartRelIdx: number | null = null;
+              let isListItem = false;
+
+              // First try to match by listString
+              for (let i = 0; i < paragraphInfos.length; i++) {
+                if (paragraphInfos[i].listString === label) {
+                  targetStartRelIdx = i;
                   isListItem = true;
                   break;
                 }
               }
 
-              if (!targetParagraph) {
-                // Fallback to literal label at paragraph start.
-                for (let i = startIdx; i <= endIdx; i++) {
-                  const p = paragraphs.items[i];
-                  const t = p.text || '';
-                  if (paragraphStartsWithLabel(t, label)) {
-                    targetIndex = i;
-                    targetParagraph = p;
+              // Fallback: match by text starting with label
+              if (targetStartRelIdx === null) {
+                for (let i = 0; i < paragraphInfos.length; i++) {
+                  if (paragraphStartsWithLabel(paragraphInfos[i].text, label)) {
+                    targetStartRelIdx = i;
                     isListItem = false;
                     break;
                   }
                 }
               }
 
-              if (!targetParagraph || targetIndex === null) {
+              if (targetStartRelIdx === null) {
                 throw new Error(`Paragraph "${label}" not found in ARTICLE ${articleName}`);
               }
 
-              const actualOldText = targetParagraph.text || '';
+              // Find the end of this section (where the next sibling or ancestor starts)
+              const targetParts = parseLabelParts(label);
+              let targetEndRelIdx = targetStartRelIdx;
+
+              for (let i = targetStartRelIdx + 1; i < paragraphInfos.length; i++) {
+                const info = paragraphInfos[i];
+                const candidateLabel = info.listString || '';
+
+                // Check if this paragraph has a numbered label
+                if (candidateLabel && /^\d+(\.\d+)*$/.test(candidateLabel)) {
+                  const candidateParts = parseLabelParts(candidateLabel);
+
+                  if (isSiblingOrAncestor(targetParts, candidateParts)) {
+                    // Found the boundary - don't include this paragraph
+                    break;
+                  }
+                }
+
+                // Also check for inline labels in text (for non-list documents)
+                const textLabel = extractNumberedLabel(info.text);
+                if (textLabel && paragraphStartsWithLabel(info.text, textLabel)) {
+                  const textParts = parseLabelParts(textLabel);
+                  if (isSiblingOrAncestor(targetParts, textParts)) {
+                    break;
+                  }
+                }
+
+                // This paragraph is part of the section to replace
+                targetEndRelIdx = i;
+              }
+
+              // Collect all text from the section
+              const sectionTexts: string[] = [];
+              for (let i = targetStartRelIdx; i <= targetEndRelIdx; i++) {
+                const text = paragraphInfos[i].text.trim();
+                if (text) {
+                  sectionTexts.push(text);
+                }
+              }
+              const fullSectionText = sectionTexts.join('\n');
+
+              // Normalize the new text (strip leading label if it's a list item)
               const normalizedNewText = isListItem ? stripLeadingLabel(label, newText) : newText;
 
+              console.log(`[editDocument] Replacing section "${label}": paragraphs ${targetStartRelIdx} to ${targetEndRelIdx} (${targetEndRelIdx - targetStartRelIdx + 1} paragraph(s))`);
+              console.log(`[editDocument] Old content (${fullSectionText.length} chars): ${fullSectionText.substring(0, 200)}...`);
+              console.log(`[editDocument] New content (${normalizedNewText.length} chars): ${normalizedNewText.substring(0, 200)}...`);
+
               return {
-                oldText: actualOldText,
+                oldText: fullSectionText,
                 newText: normalizedNewText,
-                targetParagraphIndex: targetIndex,
+                targetParagraphIndex: paragraphInfos[targetStartRelIdx].index,
+                targetEndParagraphIndex: paragraphInfos[targetEndRelIdx].index,
+                paragraphCount: targetEndRelIdx - targetStartRelIdx + 1,
               };
             }
 
@@ -616,12 +729,14 @@ function createScopedEditTools(
               oldText: target.text,
               newText: newText,
               targetParagraphIndex: undefined as number | undefined,
+              targetEndParagraphIndex: undefined as number | undefined,
+              paragraphCount: 1,
             };
           });
 
           const changeObj: DocumentChange = {
             type: 'edit',
-            description: `Replaced "${located.oldText}" with "${located.newText}"`,
+            description: `Replaced section "${searchText}" (${located.paragraphCount} paragraph(s))`,
             oldText: located.oldText,
             newText: located.newText,
             // IMPORTANT: use oldText as the searchText so the inline diff targets the full existing content.
@@ -635,6 +750,9 @@ function createScopedEditTools(
             articleEndParagraphIndex: articleBoundaries.endParagraphIndex,
             ...(typeof located.targetParagraphIndex === 'number'
               ? { targetParagraphIndex: located.targetParagraphIndex }
+              : {}),
+            ...(typeof located.targetEndParagraphIndex === 'number'
+              ? { targetEndParagraphIndex: located.targetEndParagraphIndex }
               : {}),
           };
 
@@ -660,9 +778,9 @@ function createScopedEditTools(
 
           return {
             success: true,
-            replaced: 1,
+            replaced: located.paragraphCount,
             totalFound: 1,
-            message: `Proposed replacement for "${searchText}"`,
+            message: `Proposed replacement for section "${searchText}" (${located.paragraphCount} paragraph(s))`,
             ...(warnings.length > 0 ? { warnings } : {}),
           };
         } catch (error) {
@@ -1295,11 +1413,11 @@ function createScopedEditTools(
       },
     },
     deleteText: {
-      description: 'Delete text from the article. Only works within the current article section.',
+      description: 'Delete text from the article. For numbered sections (e.g., "1.2"), deletes the ENTIRE section including all content until the next sibling section. Only works within the current article section.',
       parameters: {
         type: 'object',
         properties: {
-          searchText: { type: 'string', description: 'The text to find and delete from the article' },
+          searchText: { type: 'string', description: 'The text to find and delete from the article. For numbered paragraphs like "1.2", deletes the entire section (all content until the next sibling like "1.3" or parent like "2.")' },
           deleteAll: { type: 'boolean', description: 'If true, deletes all occurrences. If false, deletes only the first occurrence.' },
           matchCase: { type: 'boolean', description: 'Whether the search should be case-sensitive' },
           matchWholeWord: { type: 'boolean', description: 'Whether to match whole words only' },
@@ -1312,6 +1430,57 @@ function createScopedEditTools(
           const labelOnly = isNumberedParagraphLabel(searchText);
           const label = extractNumberedLabel(searchText);
           const shouldMatchWholeWord = typeof matchWholeWord === 'boolean' ? matchWholeWord : labelOnly;
+
+          /**
+           * Helper: Parse a numbered label like "1.2" or "1.2.3" into its numeric parts.
+           * Returns array like [1, 2] for "1.2" or [1, 2, 3] for "1.2.3"
+           */
+          const parseLabelParts = (lbl: string): number[] => {
+            return lbl.split('.').map(p => parseInt(p, 10)).filter(n => !isNaN(n));
+          };
+
+          /**
+           * Helper: Check if a label represents a sibling or ancestor of the target label.
+           * For target "1.2": siblings are "1.3", "1.4", etc.; ancestors are "2.", "3.", etc.
+           * For target "1.2.3": siblings are "1.2.4", "1.2.5"; ancestors are "1.3", "2.", etc.
+           */
+          const isSiblingOrAncestor = (targetParts: number[], candidateParts: number[]): boolean => {
+            if (candidateParts.length === 0) return false;
+
+            // Check if candidate is at same level or higher (fewer parts = higher level)
+            if (candidateParts.length < targetParts.length) {
+              // Candidate is at higher level (e.g., target is 1.2.3, candidate is 1.3 or 2.)
+              // Check if it's the same parent path or a later one
+              for (let i = 0; i < candidateParts.length - 1; i++) {
+                if (candidateParts[i] < targetParts[i]) return false;
+                if (candidateParts[i] > targetParts[i]) return true;
+              }
+              // Same parent prefix, check if last part is greater
+              const lastIdx = candidateParts.length - 1;
+              return candidateParts[lastIdx] > targetParts[lastIdx];
+            }
+
+            if (candidateParts.length === targetParts.length) {
+              // Same level - check if it's a later sibling
+              for (let i = 0; i < candidateParts.length - 1; i++) {
+                if (candidateParts[i] !== targetParts[i]) {
+                  // Different parent path - only count if greater
+                  return candidateParts[i] > targetParts[i];
+                }
+              }
+              // Same parent, compare last part
+              return candidateParts[candidateParts.length - 1] > targetParts[targetParts.length - 1];
+            }
+
+            // Candidate has more parts (deeper nesting) - not a sibling/ancestor
+            // Unless it's under a different parent that comes after
+            for (let i = 0; i < targetParts.length; i++) {
+              if (candidateParts[i] < targetParts[i]) return false;
+              if (candidateParts[i] > targetParts[i]) return true;
+            }
+            return false;
+          };
+
           // Locate target text but DO NOT delete yet. We only mark it red/strikethrough as a proposal.
           const located = await Word.run(async (context) => {
             const paragraphs = context.document.body.paragraphs;
@@ -1328,6 +1497,8 @@ function createScopedEditTools(
               const startIdx = articleBoundaries.startParagraphIndex;
               const endIdx = articleBoundaries.endParagraphIndex;
               const slice = paragraphs.items.slice(startIdx, endIdx + 1);
+
+              // Load all paragraph data including list info
               for (const p of slice) {
                 context.load(p, 'text');
                 const listItem = (p as any).listItemOrNullObject ? (p as any).listItemOrNullObject : (p as any).listItem;
@@ -1335,42 +1506,104 @@ function createScopedEditTools(
               }
               await context.sync();
 
-              let targetIndex: number | null = null;
-              let targetParagraph: Word.Paragraph | null = null;
+              // Build array of paragraph info for analysis
+              const paragraphInfos: Array<{
+                index: number;
+                text: string;
+                listString: string;
+                paragraph: Word.Paragraph;
+              }> = [];
 
               for (let i = startIdx; i <= endIdx; i++) {
                 const p = paragraphs.items[i];
                 const listItem = (p as any).listItemOrNullObject ? (p as any).listItemOrNullObject : (p as any).listItem;
                 const listString = listItem && !(listItem as any).isNullObject ? ((listItem as any).listString || '') : '';
-                if ((listString || '').trim() === label) {
-                  targetIndex = i;
-                  targetParagraph = p;
+                paragraphInfos.push({
+                  index: i,
+                  text: p.text || '',
+                  listString: listString.trim(),
+                  paragraph: p,
+                });
+              }
+
+              // Find the starting paragraph with the target label
+              let targetStartRelIdx: number | null = null;
+
+              // First try to match by listString
+              for (let i = 0; i < paragraphInfos.length; i++) {
+                if (paragraphInfos[i].listString === label) {
+                  targetStartRelIdx = i;
                   break;
                 }
               }
 
-              if (!targetParagraph) {
-                for (let i = startIdx; i <= endIdx; i++) {
-                  const p = paragraphs.items[i];
-                  const t = p.text || '';
-                  if (paragraphStartsWithLabel(t, label)) {
-                    targetIndex = i;
-                    targetParagraph = p;
+              // Fallback: match by text starting with label
+              if (targetStartRelIdx === null) {
+                for (let i = 0; i < paragraphInfos.length; i++) {
+                  if (paragraphStartsWithLabel(paragraphInfos[i].text, label)) {
+                    targetStartRelIdx = i;
                     break;
                   }
                 }
               }
 
-              if (!targetParagraph || targetIndex === null) {
+              if (targetStartRelIdx === null) {
                 throw new Error(`Paragraph "${label}" not found in ARTICLE ${articleName}`);
               }
 
+              // Find the end of this section (where the next sibling or ancestor starts)
+              const targetParts = parseLabelParts(label);
+              let targetEndRelIdx = targetStartRelIdx;
+
+              for (let i = targetStartRelIdx + 1; i < paragraphInfos.length; i++) {
+                const info = paragraphInfos[i];
+                const candidateLabel = info.listString || '';
+
+                // Check if this paragraph has a numbered label
+                if (candidateLabel && /^\d+(\.\d+)*$/.test(candidateLabel)) {
+                  const candidateParts = parseLabelParts(candidateLabel);
+
+                  if (isSiblingOrAncestor(targetParts, candidateParts)) {
+                    // Found the boundary - don't include this paragraph
+                    break;
+                  }
+                }
+
+                // Also check for inline labels in text (for non-list documents)
+                const textLabel = extractNumberedLabel(info.text);
+                if (textLabel && paragraphStartsWithLabel(info.text, textLabel)) {
+                  const textParts = parseLabelParts(textLabel);
+                  if (isSiblingOrAncestor(targetParts, textParts)) {
+                    break;
+                  }
+                }
+
+                // This paragraph is part of the section to delete
+                targetEndRelIdx = i;
+              }
+
+              // Collect all text from the section
+              const sectionTexts: string[] = [];
+              for (let i = targetStartRelIdx; i <= targetEndRelIdx; i++) {
+                const text = paragraphInfos[i].text.trim();
+                if (text) {
+                  sectionTexts.push(text);
+                }
+              }
+              const fullSectionText = sectionTexts.join('\n');
+
+              console.log(`[deleteText] Deleting section "${label}": paragraphs ${targetStartRelIdx} to ${targetEndRelIdx} (${targetEndRelIdx - targetStartRelIdx + 1} paragraph(s))`);
+              console.log(`[deleteText] Section content (${fullSectionText.length} chars): ${fullSectionText.substring(0, 200)}...`);
+
               return {
-                oldText: targetParagraph.text || '',
-                targetParagraphIndex: targetIndex,
+                oldText: fullSectionText,
+                targetParagraphIndex: paragraphInfos[targetStartRelIdx].index,
+                targetEndParagraphIndex: paragraphInfos[targetEndRelIdx].index,
+                paragraphCount: targetEndRelIdx - targetStartRelIdx + 1,
               };
             }
 
+            // Non-label search: just find the specific text
             const searchResults = articleRange.search(searchText, {
               matchCase: matchCase || false,
               matchWholeWord: shouldMatchWholeWord,
@@ -1387,12 +1620,14 @@ function createScopedEditTools(
             return {
               oldText: target.text,
               targetParagraphIndex: undefined as number | undefined,
+              targetEndParagraphIndex: undefined as number | undefined,
+              paragraphCount: 1,
             };
           });
 
           const changeObj: DocumentChange = {
             type: 'delete',
-            description: `Deleted "${located.oldText}"`,
+            description: `Deleted "${searchText}" section (${located.paragraphCount} paragraph(s))`,
             oldText: located.oldText,
             // IMPORTANT: use oldText as searchText so the inline diff marks the actual content.
             searchText: located.oldText,
@@ -1405,6 +1640,9 @@ function createScopedEditTools(
             articleEndParagraphIndex: articleBoundaries.endParagraphIndex,
             ...(typeof located.targetParagraphIndex === 'number'
               ? { targetParagraphIndex: located.targetParagraphIndex }
+              : {}),
+            ...(typeof located.targetEndParagraphIndex === 'number'
+              ? { targetEndParagraphIndex: located.targetEndParagraphIndex }
               : {}),
           };
 
@@ -1425,9 +1663,9 @@ function createScopedEditTools(
 
           return {
             success: true,
-            deleted: 1,
+            deleted: located.paragraphCount,
             totalFound: 1,
-            message: `Proposed deletion for "${searchText}"`,
+            message: `Proposed deletion for section "${searchText}" (${located.paragraphCount} paragraph(s))`,
           };
         } catch (error) {
           return {
@@ -1502,9 +1740,9 @@ CRITICAL: INSTRUCTION-ONLY SEARCHES - You MUST ONLY search for content explicitl
 
 AVAILABLE TOOLS:
 - readDocument: SEARCH tool - Search ARTICLE ${articleName} for a query and return contextual snippets around each match. MANDATORY: Call this BEFORE any insert/edit/delete to find the exact location text (use matchText as searchText). CRITICAL: You can ONLY search for content explicitly mentioned in the current instruction. Wildcard queries ("*" or "all") are NOT allowed.
-- editDocument: Find and replace text within ARTICLE ${articleName} only. Requires searchText from readDocument results.
+- editDocument: Find and replace text within ARTICLE ${articleName} only. For numbered sections like "1.2", this replaces the ENTIRE section (all paragraphs from "1.2" until the next sibling "1.3" or parent "2."). Requires searchText from readDocument results.
 - insertText: Insert new text within ARTICLE ${articleName} only. MANDATORY: Requires searchText from readDocument results. If user says "before X", you MUST find X via readDocument first, then use that matchText as searchText with location: "before". IMPORTANT: When extracting the text to insert from the user's instruction, preserve ALL newlines (\\n) and formatting exactly as provided. The text parameter must include newline characters where the user has line breaks.
-- deleteText: Delete text from ARTICLE ${articleName} only. Requires searchText from readDocument results.
+- deleteText: Delete text from ARTICLE ${articleName} only. For numbered sections like "1.2", this deletes the ENTIRE section (all paragraphs from "1.2" until the next sibling "1.3" or parent "2."). Requires searchText from readDocument results.
 
 MANDATORY WORKFLOW - FOLLOW THIS EXACTLY:
 1. UNDERSTAND the user's instruction. Extract the specific content mentioned (numbered paragraphs, quoted text, key phrases).
@@ -1527,6 +1765,7 @@ MANDATORY WORKFLOW - FOLLOW THIS EXACTLY:
    - For "Delete and substitute"/"Replace"/"Substitute" instructions:
      - Use editDocument (NOT deleteText + insertText). This renders a proper inline replacement: green new text at the start, red struck-through old text after.
      - If the instruction references numbered paragraphs (e.g., "1.2", "1.3"), set searchText to the numbered label (e.g., "1.2") and set newText to the replacement content.
+     - IMPORTANT: For numbered sections, editDocument/deleteText will automatically find and operate on the ENTIRE section (all content from "1.2" until the next sibling section "1.3" or parent "2."). You don't need to manually find all the content.
      - Only use insertText for true additions (e.g., "Add the following paragraph before ...") where no existing text is being replaced.
    - Call the appropriate tool with the matchText as searchText
 

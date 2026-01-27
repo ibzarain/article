@@ -23,6 +23,11 @@ export interface DocumentChange {
    * When present, inline diff rendering should operate on that paragraph.
    */
   targetParagraphIndex?: number;
+  /**
+   * End paragraph index when the change spans multiple paragraphs.
+   * Used with targetParagraphIndex to define a range of paragraphs.
+   */
+  targetEndParagraphIndex?: number;
   formatChanges?: {
     bold?: boolean;
     italic?: boolean;
