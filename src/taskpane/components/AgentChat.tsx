@@ -114,6 +114,13 @@ const createStyles = (isLight: boolean): any => ({
     border: isLight ? "1px solid #d0d7de" : "1px solid #30363d",
     borderBottomLeftRadius: "4px",
   },
+  assistantText: {
+    fontSize: "13px",
+    lineHeight: "1.5",
+    color: isLight ? "#24292f" : "#c9d1d9",
+    whiteSpace: "pre-wrap" as const,
+    wordWrap: "break-word",
+  },
   inputContainer: {
     padding: "10px 10px 6px 10px",
     borderTop: isLight ? "1px solid #d0d7de" : "1px solid #21262d",
@@ -631,6 +638,34 @@ const createStyles = (isLight: boolean): any => ({
     fontSize: "11px",
     lineHeight: "1.5",
   },
+  changeContentPreviewRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    cursor: "pointer",
+    padding: "6px 0",
+    border: "none",
+    background: "none",
+    color: "inherit",
+    font: "inherit",
+    width: "100%",
+    textAlign: "left",
+  },
+  changeContentPreviewText: {
+    flex: 1,
+    minWidth: 0,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap" as const,
+    fontSize: "11px",
+    fontFamily: "'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace",
+  },
+  changeContentExpandIcon: {
+    flexShrink: 0,
+    display: "flex",
+    alignItems: "center",
+    color: isLight ? "#57606a" : "#8b949e",
+  },
   diffLine: {
     padding: "4px 8px",
     borderRadius: "4px",
@@ -711,6 +746,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
   const [processingChanges, setProcessingChanges] = useState<Set<string>>(new Set());
   const [bulkIsProcessing, setBulkIsProcessing] = useState<boolean>(false);
   const [expandedChecklistSteps, setExpandedChecklistSteps] = useState<Set<string>>(new Set());
+  const [expandedChangeIds, setExpandedChangeIds] = useState<Set<string>>(new Set());
   const messageIdCounter = useRef<number>(0);
   const lightStyles = useLightStyles();
   const darkStyles = useDarkStyles();
@@ -1295,7 +1331,17 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
     });
   };
 
+  const toggleChangeContent = (changeId: string) => {
+    setExpandedChangeIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(changeId)) next.delete(changeId);
+      else next.add(changeId);
+      return next;
+    });
+  };
+
   const CHECKLIST_PREVIEW_LEN = 80;
+  const CHANGE_CONTENT_PREVIEW_LEN = 80;
 
   return (
     <div className={styles.container}>
@@ -1395,13 +1441,20 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                   className={`${styles.message} ${message.role === "user" ? styles.userMessage : styles.assistantMessage
                     } ${hasBlockSpacing ? styles.blockSpacing : ""}`}
                 >
-                  <div
-                    className={`${styles.messageBubble} ${message.role === "user" ? styles.userBubble : styles.assistantBubble
-                      }`}
-                    style={{ whiteSpace: "pre-wrap" }}
-                  >
-                    {message.content}
-                  </div>
+                  {message.role === "user" ? (
+                    <div
+                      className={`${styles.messageBubble} ${styles.userBubble}`}
+                      style={{ whiteSpace: "pre-wrap" }}
+                    >
+                      {message.content}
+                    </div>
+                  ) : (
+                    message.content ? (
+                      <div className={styles.assistantText}>
+                        {message.content}
+                      </div>
+                    ) : null
+                  )}
 
                   {/* Checklist only rendered via checklist blocks (at bottom of turn) */}
 
@@ -1472,35 +1525,123 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                               </div>
                             </div>
                             <div className={styles.changeContent}>
-                              {change.type === "edit" && (
-                                <>
-                                  {change.oldText && (
-                                    <div className={`${styles.diffLine} ${styles.diffOld}`}>
-                                      <span style={{ opacity: 0.7 }}>−</span> {change.oldText}
+                              {(() => {
+                                const fullOld = change.oldText ?? "";
+                                const fullNew = change.newText ?? "";
+                                const getPreview = () => {
+                                  if (change.type === "edit") {
+                                    const combined = fullOld || fullNew;
+                                    return combined.length > CHANGE_CONTENT_PREVIEW_LEN
+                                      ? combined.slice(0, CHANGE_CONTENT_PREVIEW_LEN) + "…"
+                                      : combined || "";
+                                  }
+                                  if (change.type === "insert" && fullNew) {
+                                    return fullNew.length > CHANGE_CONTENT_PREVIEW_LEN
+                                      ? fullNew.slice(0, CHANGE_CONTENT_PREVIEW_LEN) + "…"
+                                      : fullNew;
+                                  }
+                                  if (change.type === "delete" && fullOld) {
+                                    return fullOld.length > CHANGE_CONTENT_PREVIEW_LEN
+                                      ? fullOld.slice(0, CHANGE_CONTENT_PREVIEW_LEN) + "…"
+                                      : fullOld;
+                                  }
+                                  return "";
+                                };
+                                const preview = getPreview();
+                                const isExpandable =
+                                  (change.type === "edit" && (fullOld.length > CHANGE_CONTENT_PREVIEW_LEN || fullNew.length > CHANGE_CONTENT_PREVIEW_LEN)) ||
+                                  (change.type === "insert" && fullNew.length > CHANGE_CONTENT_PREVIEW_LEN) ||
+                                  (change.type === "delete" && fullOld.length > CHANGE_CONTENT_PREVIEW_LEN);
+                                const expanded = expandedChangeIds.has(change.id);
+
+                                if (change.type === "format") {
+                                  return (
+                                    <div className={styles.changeDescription}>
+                                      Applied formatting to: "{change.searchText || 'selected text'}"
                                     </div>
-                                  )}
-                                  {change.newText && (
-                                    <div className={`${styles.diffLine} ${styles.diffNew}`}>
-                                      <span style={{ opacity: 0.7 }}>+</span> {change.newText}
-                                    </div>
-                                  )}
-                                </>
-                              )}
-                              {change.type === "insert" && change.newText && (
-                                <div className={`${styles.diffLine} ${styles.diffInsert}`}>
-                                  <span style={{ opacity: 0.7 }}>+</span> {change.newText}
-                                </div>
-                              )}
-                              {change.type === "delete" && change.oldText && (
-                                <div className={`${styles.diffLine} ${styles.diffDelete}`}>
-                                  <span style={{ opacity: 0.7 }}>−</span> {change.oldText}
-                                </div>
-                              )}
-                              {change.type === "format" && (
-                                <div className={styles.changeDescription}>
-                                  Applied formatting to: "{change.searchText || 'selected text'}"
-                                </div>
-                              )}
+                                  );
+                                }
+                                if (isExpandable) {
+                                  return (
+                                    <>
+                                      <button
+                                        type="button"
+                                        className={styles.changeContentPreviewRow}
+                                        onClick={() => toggleChangeContent(change.id)}
+                                        aria-expanded={expanded}
+                                        title="Toggle full diff"
+                                      >
+                                        <span className={styles.changeContentPreviewText}>
+                                          {expanded ? (change.type === "edit" ? "− … + …" : change.type === "insert" ? "+ …" : "− …") : preview}
+                                        </span>
+                                        <span className={styles.changeContentExpandIcon}>
+                                          {expanded ? (
+                                            <ChevronUpRegular style={{ fontSize: "14px" }} />
+                                          ) : (
+                                            <ChevronDownRegular style={{ fontSize: "14px" }} />
+                                          )}
+                                        </span>
+                                      </button>
+                                      {expanded && (
+                                        <div style={{ marginTop: "4px" }}>
+                                          {change.type === "edit" && (
+                                            <>
+                                              {change.oldText && (
+                                                <div className={`${styles.diffLine} ${styles.diffOld}`}>
+                                                  <span style={{ opacity: 0.7 }}>−</span> {change.oldText}
+                                                </div>
+                                              )}
+                                              {change.newText && (
+                                                <div className={`${styles.diffLine} ${styles.diffNew}`}>
+                                                  <span style={{ opacity: 0.7 }}>+</span> {change.newText}
+                                                </div>
+                                              )}
+                                            </>
+                                          )}
+                                          {change.type === "insert" && change.newText && (
+                                            <div className={`${styles.diffLine} ${styles.diffInsert}`}>
+                                              <span style={{ opacity: 0.7 }}>+</span> {change.newText}
+                                            </div>
+                                          )}
+                                          {change.type === "delete" && change.oldText && (
+                                            <div className={`${styles.diffLine} ${styles.diffDelete}`}>
+                                              <span style={{ opacity: 0.7 }}>−</span> {change.oldText}
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </>
+                                  );
+                                }
+                                return (
+                                  <>
+                                    {change.type === "edit" && (
+                                      <>
+                                        {change.oldText && (
+                                          <div className={`${styles.diffLine} ${styles.diffOld}`}>
+                                            <span style={{ opacity: 0.7 }}>−</span> {change.oldText}
+                                          </div>
+                                        )}
+                                        {change.newText && (
+                                          <div className={`${styles.diffLine} ${styles.diffNew}`}>
+                                            <span style={{ opacity: 0.7 }}>+</span> {change.newText}
+                                          </div>
+                                        )}
+                                      </>
+                                    )}
+                                    {change.type === "insert" && change.newText && (
+                                      <div className={`${styles.diffLine} ${styles.diffInsert}`}>
+                                        <span style={{ opacity: 0.7 }}>+</span> {change.newText}
+                                      </div>
+                                    )}
+                                    {change.type === "delete" && change.oldText && (
+                                      <div className={`${styles.diffLine} ${styles.diffDelete}`}>
+                                        <span style={{ opacity: 0.7 }}>−</span> {change.oldText}
+                                      </div>
+                                    )}
+                                  </>
+                                );
+                              })()}
                             </div>
                           </div>
                         );
