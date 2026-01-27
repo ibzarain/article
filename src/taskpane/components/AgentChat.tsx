@@ -94,7 +94,6 @@ const createStyles = (isLight: boolean): any => ({
   },
   assistantMessage: {
     alignSelf: "flex-start",
-    maxWidth: "100%",
   },
   messageBubble: {
     padding: "12px 16px",
@@ -452,7 +451,6 @@ const createStyles = (isLight: boolean): any => ({
     display: "flex",
     flexDirection: "column",
     gap: "6px",
-    width: "100%",
   },
   checklistHeader: {
     fontSize: "10px",
@@ -524,6 +522,7 @@ const createStyles = (isLight: boolean): any => ({
     overflow: "hidden",
     backgroundColor: isLight ? "#f6f8fa" : "#161b22",
     width: "100%",
+    boxSizing: "border-box",
   },
   changeHeader: {
     display: "flex",
@@ -539,13 +538,11 @@ const createStyles = (isLight: boolean): any => ({
     alignItems: "center",
     gap: "8px",
     minWidth: 0,
-    flex: 1,
   },
   changeHeaderMeta: {
     display: "flex",
     flexDirection: "column",
     minWidth: 0,
-    flex: 1,
   },
   changeHeaderSecondary: {
     fontSize: "11px",
@@ -554,8 +551,7 @@ const createStyles = (isLight: boolean): any => ({
     whiteSpace: "nowrap",
     overflow: "hidden",
     textOverflow: "ellipsis",
-    minWidth: 0,
-    flex: 1,
+    maxWidth: "520px",
   },
   decisionPill: {
     padding: "2px 6px",
@@ -643,6 +639,8 @@ const createStyles = (isLight: boolean): any => ({
     fontFamily: "'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace",
     fontSize: "11px",
     lineHeight: "1.5",
+    width: "100%",
+    boxSizing: "border-box",
   },
   changeContentPreviewRow: {
     display: "flex",
@@ -731,6 +729,7 @@ const createStyles = (isLight: boolean): any => ({
     flexDirection: "column",
     gap: "8px",
     width: "100%",
+    minWidth: 0,
   },
 });
 
@@ -1385,8 +1384,8 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
     });
   };
 
-  const CHECKLIST_PREVIEW_LEN = 220;
-  const CHANGE_CONTENT_PREVIEW_LEN = 220;
+  const CHECKLIST_PREVIEW_LEN = 80;
+  const CHANGE_CONTENT_PREVIEW_LEN = 80;
 
   return (
     <div className={styles.container}>
