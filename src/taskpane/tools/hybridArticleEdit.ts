@@ -481,6 +481,22 @@ function createScopedEditTools(
     // should still be treated as a wrapped sentence and collapsed.
     const listLikeLineRegex = /^\s*(?:\d+\.\d+(?:\.\d+)*|\d+[.)]|[-*•])\s+\S+/;
 
+    const isAllCapsHeading = (line: string): boolean => {
+      const letters = (line || '').replace(/[^A-Za-z]/g, '');
+      if (letters.length < 6) return false;
+      const upper = letters.replace(/[^A-Z]/g, '').length;
+      return upper / letters.length >= 0.85;
+    };
+
+    const isStructuralLine = (line: string): boolean => {
+      const t = (line || '').trim();
+      if (!t) return false;
+      if (/:$/.test(t)) return true; // lead-in like "agree as follows:"
+      if (/^(?:ARTICLE|SECTION|EXHIBIT|SCHEDULE|APPENDIX)\b/i.test(t)) return true;
+      if (isAllCapsHeading(t) && t.length <= 120) return true;
+      return false;
+    };
+
     const blocks = raw.split(/\n\s*\n+/); // allow blank lines to separate paragraphs, but don't create empty bullets
     const normalizedBlocks: string[] = [];
 
@@ -493,9 +509,23 @@ function createScopedEditTools(
       if (lines.length === 0) continue;
 
       const listLikeCount = lines.filter(l => listLikeLineRegex.test(l)).length;
-      if (listLikeCount >= 2) {
+      const avgLen = lines.reduce((sum, l) => sum + l.length, 0) / Math.max(1, lines.length);
+
+      // Preserve formatting when there's clear structure (headings/lead-ins), or clearly multiple points.
+      const hasStructural = lines.some(isStructuralLine);
+
+      // Special-case: "1.1 <text>\n<continuation>" is almost always wrapping, not a new bullet.
+      const looksLikeWrappedSinglePoint =
+        listLikeCount === 1 &&
+        lines.length === 2 &&
+        listLikeLineRegex.test(lines[0]) &&
+        !listLikeLineRegex.test(lines[1]);
+
+      if (listLikeCount >= 2 || hasStructural || (lines.length >= 3 && avgLen < 70)) {
         // Keep separate points (preserve newlines within this block).
         normalizedBlocks.push(lines.join('\n'));
+      } else if (looksLikeWrappedSinglePoint) {
+        normalizedBlocks.push(lines.join(' ').replace(/\s+/g, ' ').trim());
       } else {
         // Treat as one wrapped sentence/paragraph.
         normalizedBlocks.push(lines.join(' ').replace(/\s+/g, ' ').trim());
