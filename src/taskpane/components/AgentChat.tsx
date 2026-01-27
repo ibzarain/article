@@ -5,7 +5,7 @@ import {
   makeStyles,
   Spinner,
 } from "@fluentui/react-components";
-import { DocumentRegular, CheckmarkCircleFilled, DismissCircleFilled, ArrowUpRegular, EditRegular, ChatRegular, ChevronDownRegular, WeatherSunnyRegular, WeatherMoonRegular } from "@fluentui/react-icons";
+import { DocumentRegular, CheckmarkCircleFilled, DismissCircleFilled, ArrowUpRegular, EditRegular, ChatRegular, ChevronDownRegular, ChevronUpRegular, WeatherSunnyRegular, WeatherMoonRegular } from "@fluentui/react-icons";
 import { generateAgentResponse } from "../agent/wordAgent";
 import { createChangeTracker } from "../utils/changeTracker";
 import { DocumentChange, ChangeTracking } from "../types/changes";
@@ -80,10 +80,13 @@ const createStyles = (isLight: boolean): any => ({
   message: {
     display: "flex",
     flexDirection: "column",
-    gap: "4px",
+    gap: "12px",
     maxWidth: "85%",
   },
   messageWithGap: {
+    marginTop: "12px",
+  },
+  blockSpacing: {
     marginTop: "12px",
   },
   userMessage: {
@@ -474,6 +477,38 @@ const createStyles = (isLight: boolean): any => ({
     lineHeight: "1.4",
     whiteSpace: "pre-wrap",
   },
+  checklistItemSummary: {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    cursor: "pointer",
+    flex: 1,
+    minWidth: 0,
+    padding: 0,
+    margin: 0,
+    border: "none",
+    background: "none",
+    color: "inherit",
+    font: "inherit",
+    textAlign: "left",
+    width: "100%",
+  },
+  checklistItemPreview: {
+    fontSize: "12px",
+    lineHeight: "1.4",
+    color: "inherit",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    flex: 1,
+    minWidth: 0,
+  },
+  checklistItemExpandIcon: {
+    flexShrink: 0,
+    display: "flex",
+    alignItems: "center",
+    color: isLight ? "#57606a" : "#8b949e",
+  },
   changeBlock: {
     border: isLight ? "1px solid #d0d7de" : "1px solid #30363d",
     borderRadius: "8px",
@@ -634,8 +669,7 @@ const createStyles = (isLight: boolean): any => ({
   changesContainer: {
     display: "flex",
     flexDirection: "column",
-    gap: "6px",
-    marginTop: "8px",
+    gap: "8px",
   },
 });
 
@@ -676,6 +710,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
   const currentMessageChangesRef = useRef<DocumentChange[]>([]);
   const [processingChanges, setProcessingChanges] = useState<Set<string>>(new Set());
   const [bulkIsProcessing, setBulkIsProcessing] = useState<boolean>(false);
+  const [expandedChecklistSteps, setExpandedChecklistSteps] = useState<Set<string>>(new Set());
   const messageIdCounter = useRef<number>(0);
   const lightStyles = useLightStyles();
   const darkStyles = useDarkStyles();
@@ -1220,6 +1255,47 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
     }
   };
 
+  type RenderBlock =
+    | { type: "user"; message: Message }
+    | { type: "assistant"; message: Message; omitChecklist?: boolean }
+    | { type: "checklist"; checklist: ChecklistStep[]; messageId: string };
+
+  const renderBlocks = useMemo((): RenderBlock[] => {
+    const blocks: RenderBlock[] = [];
+    let pendingChecklist: ChecklistStep[] | null = null;
+    let pendingMessageId: string | null = null;
+    for (const message of messages) {
+      if (message.role === "user") {
+        if (pendingChecklist && pendingMessageId) {
+          blocks.push({ type: "checklist", checklist: pendingChecklist, messageId: pendingMessageId });
+          pendingChecklist = null;
+          pendingMessageId = null;
+        }
+        blocks.push({ type: "user", message });
+      } else if (message.checklist && message.checklist.length > 0 && message.messageId) {
+        blocks.push({ type: "assistant", message, omitChecklist: true });
+        pendingChecklist = message.checklist;
+        pendingMessageId = message.messageId;
+      } else {
+        blocks.push({ type: "assistant", message });
+      }
+    }
+    if (pendingChecklist && pendingMessageId) {
+      blocks.push({ type: "checklist", checklist: pendingChecklist, messageId: pendingMessageId });
+    }
+    return blocks;
+  }, [messages]);
+
+  const toggleChecklistStep = (stepId: string) => {
+    setExpandedChecklistSteps((prev) => {
+      const next = new Set(prev);
+      if (next.has(stepId)) next.delete(stepId);
+      else next.add(stepId);
+      return next;
+    });
+  };
+
+  const CHECKLIST_PREVIEW_LEN = 80;
 
   return (
     <div className={styles.container}>
@@ -1244,16 +1320,80 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
               </div>
             </div>
           ) : (
-            messages.map((message, index) => {
-              const prevMessage = index > 0 ? messages[index - 1] : null;
-              const shouldHaveGap = index === 0 ||
-                (prevMessage && prevMessage.role !== message.role);
+            renderBlocks.map((block, index) => {
+              const hasBlockSpacing = index > 0;
 
+              if (block.type === "checklist") {
+                return (
+                  <div
+                    key={`checklist-${block.messageId}`}
+                    className={`${styles.message} ${styles.assistantMessage} ${hasBlockSpacing ? styles.blockSpacing : ""}`}
+                  >
+                    <div className={styles.checklistContainer}>
+                      <div className={styles.checklistHeader}>Checklist</div>
+                      {block.checklist.map((step) => {
+                        const expanded = expandedChecklistSteps.has(step.id);
+                        const preview = step.text.length <= CHECKLIST_PREVIEW_LEN
+                          ? step.text
+                          : step.text.slice(0, CHECKLIST_PREVIEW_LEN) + "…";
+                        const canExpand = step.text.length > CHECKLIST_PREVIEW_LEN;
+                        return (
+                          <div key={step.id} className={styles.checklistItem}>
+                            <div className={styles.checklistIcon}>
+                              {step.status === "done" ? (
+                                <CheckmarkCircleFilled style={{ fontSize: "14px", color: "#1a7f37" }} />
+                              ) : step.status === "error" ? (
+                                <DismissCircleFilled style={{ fontSize: "14px", color: "#cf222e" }} />
+                              ) : step.status === "in_progress" ? (
+                                <Spinner size="tiny" />
+                              ) : (
+                                <span className={styles.checklistPendingDot} />
+                              )}
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              {canExpand ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    className={styles.checklistItemSummary}
+                                    onClick={() => toggleChecklistStep(step.id)}
+                                    aria-expanded={expanded}
+                                  >
+                                    <span className={styles.checklistItemPreview} title={step.text}>
+                                      {preview}
+                                    </span>
+                                    <span className={styles.checklistItemExpandIcon}>
+                                      {expanded ? (
+                                        <ChevronUpRegular style={{ fontSize: "14px" }} />
+                                      ) : (
+                                        <ChevronDownRegular style={{ fontSize: "14px" }} />
+                                      )}
+                                    </span>
+                                  </button>
+                                  {expanded && (
+                                    <div className={styles.checklistText} style={{ whiteSpace: "pre-wrap", marginTop: "4px" }}>
+                                      {step.text}
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                <div className={styles.checklistText}>{step.text}</div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              }
+
+              const message = block.type === "user" ? block.message : block.message;
               return (
                 <div
-                  key={message.messageId || index}
+                  key={message.messageId ?? index}
                   className={`${styles.message} ${message.role === "user" ? styles.userMessage : styles.assistantMessage
-                    } ${shouldHaveGap ? styles.messageWithGap : ""}`}
+                    } ${hasBlockSpacing ? styles.blockSpacing : ""}`}
                 >
                   <div
                     className={`${styles.messageBubble} ${message.role === "user" ? styles.userBubble : styles.assistantBubble
@@ -1263,27 +1403,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                     {message.content}
                   </div>
 
-                  {message.role === "assistant" && message.checklist && message.checklist.length > 0 && (
-                    <div className={styles.checklistContainer}>
-                      <div className={styles.checklistHeader}>Checklist</div>
-                      {message.checklist.map((step) => (
-                        <div key={step.id} className={styles.checklistItem}>
-                          <div className={styles.checklistIcon}>
-                            {step.status === "done" ? (
-                              <CheckmarkCircleFilled style={{ fontSize: "14px", color: "#1a7f37" }} />
-                            ) : step.status === "error" ? (
-                              <DismissCircleFilled style={{ fontSize: "14px", color: "#cf222e" }} />
-                            ) : step.status === "in_progress" ? (
-                              <Spinner size="tiny" />
-                            ) : (
-                              <span className={styles.checklistPendingDot} />
-                            )}
-                          </div>
-                          <div className={styles.checklistText}>{step.text}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  {/* Checklist only rendered via checklist blocks (at bottom of turn) */}
 
                   {/* Show changes inline for assistant messages */}
                   {message.role === "assistant" && message.changes && message.changes.length > 0 && (
