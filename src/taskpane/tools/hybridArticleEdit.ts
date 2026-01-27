@@ -467,6 +467,45 @@ function createScopedEditTools(
     return value;
   };
 
+  /**
+   * If replacement text has no explicit numbered sub-points (e.g. "1.2", "1.3" at start of lines),
+   * treat it as one sentence and collapse newlines to spaces so it stays one bullet.
+   * Prevents "one sentence broken across lines" from becoming multiple numbered items.
+   */
+  const collapseToSingleSentenceIfNoExplicitPoints = (text: string): string => {
+    const raw = (text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+    if (!raw || !raw.includes('\n')) return raw;
+
+    // Heuristic: only preserve line breaks when the user is *actually* providing multiple points.
+    // We require 2+ "list-like" lines; a single line that happens to start with "1.2" (e.g. a clause reference)
+    // should still be treated as a wrapped sentence and collapsed.
+    const listLikeLineRegex = /^\s*(?:\d+\.\d+(?:\.\d+)*|\d+[.)]|[-*•])\s+\S+/;
+
+    const blocks = raw.split(/\n\s*\n+/); // allow blank lines to separate paragraphs, but don't create empty bullets
+    const normalizedBlocks: string[] = [];
+
+    for (const block of blocks) {
+      const lines = block
+        .split('\n')
+        .map(l => l.trim())
+        .filter(l => l.length > 0);
+
+      if (lines.length === 0) continue;
+
+      const listLikeCount = lines.filter(l => listLikeLineRegex.test(l)).length;
+      if (listLikeCount >= 2) {
+        // Keep separate points (preserve newlines within this block).
+        normalizedBlocks.push(lines.join('\n'));
+      } else {
+        // Treat as one wrapped sentence/paragraph.
+        normalizedBlocks.push(lines.join(' ').replace(/\s+/g, ' ').trim());
+      }
+    }
+
+    // Join blocks with a single newline (paragraph break) to avoid inserting empty list items.
+    return normalizedBlocks.join('\n').trim();
+  };
+
   const findParagraphByNumberLabel = async (
     context: Word.RequestContext,
     paragraphs: Word.ParagraphCollection,
@@ -512,7 +551,7 @@ function createScopedEditTools(
         type: 'object',
         properties: {
           searchText: { type: 'string', description: 'The text or paragraph label to find (e.g. "1.2" or "1.3"). For labels like "1.2", replaces that entire section until the next sibling like "1.3" or parent like "2."—all within the same bullet/number.' },
-          newText: { type: 'string', description: 'The COMPLETE new text to replace the found text with. Include the full replacement—do not cut off or abbreviate. Preserve line breaks (\\n) if the section has multiple lines.' },
+          newText: { type: 'string', description: 'The COMPLETE new text to replace the found text with. If it is one sentence broken across multiple lines (and the user did not specify separate numbered points like 1.2, 1.3), it will be combined into a single bullet. Only preserve line breaks when the user explicitly intends multiple numbered sub-points.' },
           replaceAll: { type: 'boolean', description: 'If true, replaces all occurrences. If false, replaces only the first occurrence.' },
           matchCase: { type: 'boolean', description: 'Whether the search should be case-sensitive' },
           matchWholeWord: { type: 'boolean', description: 'Whether to match whole words only' },
@@ -693,8 +732,9 @@ function createScopedEditTools(
               }
               const fullSectionText = sectionTexts.join('\n');
 
-              // Normalize the new text (strip leading label if it's a list item)
-              const normalizedNewText = isListItem ? stripLeadingLabel(label, newText) : newText;
+              // Normalize the new text (strip leading label if list item; collapse multi-line to one sentence when no explicit sub-points)
+              let normalizedNewText = isListItem ? stripLeadingLabel(label, newText) : newText;
+              normalizedNewText = collapseToSingleSentenceIfNoExplicitPoints(normalizedNewText);
 
               console.log(`[editDocument] Replacing section "${label}": paragraphs ${targetStartRelIdx} to ${targetEndRelIdx} (${targetEndRelIdx - targetStartRelIdx + 1} paragraph(s))`);
               console.log(`[editDocument] Old content (${fullSectionText.length} chars): ${fullSectionText.substring(0, 200)}...`);
@@ -725,9 +765,10 @@ function createScopedEditTools(
             context.load(target, 'text');
             await context.sync();
 
+            const normalizedNew = collapseToSingleSentenceIfNoExplicitPoints(newText);
             return {
               oldText: target.text,
-              newText: newText,
+              newText: normalizedNew,
               targetParagraphIndex: undefined as number | undefined,
               targetEndParagraphIndex: undefined as number | undefined,
               paragraphCount: 1,
@@ -792,11 +833,11 @@ function createScopedEditTools(
       },
     },
     insertText: {
-      description: 'Insert text into the article at a specific location. Only works within the current article section. Use searchText from readDocument results to identify where to insert. The searchText should be unique text near the insertion point - it can be the exact matchText from readDocument or nearby unique text from the snippets.',
+      description: 'Insert text into the article at a specific location. If the text is one sentence broken across multiple lines and the user did not specify separate numbered points (1.2, 1.3, etc.), it is combined into a single bullet. Only works within the current article section. Use searchText from readDocument results to identify where to insert.',
       parameters: {
         type: 'object',
         properties: {
-          text: { type: 'string', description: 'The text to insert' },
+          text: { type: 'string', description: 'The text to insert. One sentence across multiple lines (without explicit sub-points like 1.2, 1.3) is treated as a single paragraph.' },
           location: {
             type: 'string',
             enum: ['before', 'after', 'beginning', 'end', 'inline'],
@@ -810,6 +851,8 @@ function createScopedEditTools(
         try {
           ensureFreshRead('insertText');
           const warnings: string[] = [];
+          // One sentence across lines with no explicit sub-points (1.2, 1.3) → treat as one bullet
+          const normalizedText = collapseToSingleSentenceIfNoExplicitPoints(text || '');
           const labelOnly = searchText ? isNumberedParagraphLabel(searchText) : false;
           const label = searchText ? extractNumberedLabel(searchText) : '';
 
@@ -834,12 +877,12 @@ function createScopedEditTools(
               range = startRange;
               insertLocation = Word.InsertLocation.after;
               targetParagraph = startParagraph;
-              insertAsNewParagraph = text.includes('\n'); // Multiline = new paragraph
+              insertAsNewParagraph = normalizedText.includes('\n'); // Multiline = new paragraph
             } else if (location === 'end') {
               range = endRange;
               insertLocation = Word.InsertLocation.before;
               targetParagraph = endParagraph;
-              insertAsNewParagraph = text.includes('\n'); // Multiline = new paragraph
+              insertAsNewParagraph = normalizedText.includes('\n'); // Multiline = new paragraph
             } else if (location === 'before' || location === 'after' || location === 'inline') {
               if (!searchText) {
                 throw new Error('searchText is required when location is "before", "after", or "inline"');
@@ -1150,7 +1193,7 @@ function createScopedEditTools(
                   } else {
                     // Text is in the middle or end of paragraph
                     // For multiline text, insert as new paragraph; otherwise inline
-                    if (text.includes('\n')) {
+                    if (normalizedText.includes('\n')) {
                       range = targetParagraph.getRange('Start');
                       insertLocation = Word.InsertLocation.before;
                       insertAsNewParagraph = true;
@@ -1172,7 +1215,7 @@ function createScopedEditTools(
                   } else {
                     // Text is in middle
                     // For multiline text, insert as new paragraph; otherwise inline
-                    if (text.includes('\n')) {
+                    if (normalizedText.includes('\n')) {
                       range = targetParagraph.getRange('End');
                       insertLocation = Word.InsertLocation.after;
                       insertAsNewParagraph = true;
@@ -1191,11 +1234,11 @@ function createScopedEditTools(
                 } else if (location === 'before') {
                   range = targetParagraph.getRange('Start');
                   insertLocation = Word.InsertLocation.before;
-                  insertAsNewParagraph = text.includes('\n'); // Multiline = new paragraph
+                  insertAsNewParagraph = normalizedText.includes('\n'); // Multiline = new paragraph
                 } else {
                   range = targetParagraph.getRange('End');
                   insertLocation = Word.InsertLocation.after;
-                  insertAsNewParagraph = text.includes('\n'); // Multiline = new paragraph
+                  insertAsNewParagraph = normalizedText.includes('\n'); // Multiline = new paragraph
                 }
               }
             } else {
@@ -1217,7 +1260,7 @@ function createScopedEditTools(
                   : Word.InsertLocation.after;
 
               // Split text by newlines to create multiple paragraphs if needed
-              const textLines = text.split('\n');
+              const textLines = normalizedText.split('\n');
               let firstParagraph: Word.Paragraph | null = null;
               let lastParagraph: Word.Paragraph = targetParagraph;
 
@@ -1250,7 +1293,7 @@ function createScopedEditTools(
                 insertedRange = firstParagraph.getRange().expandTo(lastParagraph.getRange());
               } else {
                 // Fallback if no paragraphs were created
-                const newParagraph = targetParagraph.insertParagraph(text, initialInsertLocation);
+                const newParagraph = targetParagraph.insertParagraph(normalizedText, initialInsertLocation);
                 context.load(newParagraph, ['style']);
                 await context.sync();
                 if (targetParagraph.style && targetParagraph.style !== 'Normal') {
@@ -1262,14 +1305,14 @@ function createScopedEditTools(
             } else if (location === 'inline') {
               // Inline insertion: insert text directly after found text
               // Convert newlines to spaces for inline insertion
-              const textToInsert = (text.startsWith(' ') || text.startsWith('\n') ? text : ' ' + text)
+              const textToInsert = (normalizedText.startsWith(' ') || normalizedText.startsWith('\n') ? normalizedText : ' ' + normalizedText)
                 .replace(/\n/g, ' ');
               insertedRange = range.insertText(textToInsert, Word.InsertLocation.after);
             } else if (location === 'after') {
               // Inserting after found text - handle newlines properly
-              if (text.includes('\n')) {
+              if (normalizedText.includes('\n')) {
                 // If text has newlines, insert as paragraphs
-                const textLines = text.split('\n');
+                const textLines = normalizedText.split('\n');
                 let firstParagraph: Word.Paragraph | null = null;
                 let lastParagraph: Word.Paragraph = targetParagraph;
 
@@ -1296,19 +1339,19 @@ function createScopedEditTools(
                 if (firstParagraph) {
                   insertedRange = firstParagraph.getRange().expandTo(lastParagraph.getRange());
                 } else {
-                  const textToInsert = text.startsWith(' ') || text.startsWith('\n') ? text : ' ' + text;
+                  const textToInsert = normalizedText.startsWith(' ') || normalizedText.startsWith('\n') ? normalizedText : ' ' + normalizedText;
                   insertedRange = range.insertText(textToInsert, Word.InsertLocation.after);
                 }
               } else {
                 // No newlines - regular inline insertion
-                const textToInsert = text.startsWith(' ') || text.startsWith('\n') ? text : ' ' + text;
+                const textToInsert = normalizedText.startsWith(' ') || normalizedText.startsWith('\n') ? normalizedText : ' ' + normalizedText;
                 insertedRange = range.insertText(textToInsert, Word.InsertLocation.after);
               }
             } else {
               // Regular text insertion (before found text, or beginning/end of article)
               // Handle newlines by splitting into paragraphs
-              if (text.includes('\n')) {
-                const textLines = text.split('\n');
+              if (normalizedText.includes('\n')) {
+                const textLines = normalizedText.split('\n');
                 let firstParagraph: Word.Paragraph | null = null;
                 let lastParagraph: Word.Paragraph = targetParagraph;
 
@@ -1343,10 +1386,10 @@ function createScopedEditTools(
                 if (firstParagraph) {
                   insertedRange = firstParagraph.getRange().expandTo(lastParagraph.getRange());
                 } else {
-                  insertedRange = range.insertText(text, insertLocation);
+                  insertedRange = range.insertText(normalizedText, insertLocation);
                 }
               } else {
-                insertedRange = range.insertText(text, insertLocation);
+                insertedRange = range.insertText(normalizedText, insertLocation);
               }
             }
 
@@ -1367,8 +1410,8 @@ function createScopedEditTools(
           if (changeTracker) {
             const changeObj: DocumentChange = {
               type: 'insert',
-              description: `Inserted "${text}" ${location}${searchText ? ` "${searchText}"` : ''}`,
-              newText: text,
+              description: `Inserted "${normalizedText}" ${location}${searchText ? ` "${searchText}"` : ''}`,
+              newText: normalizedText,
               searchText: searchText || location,
               location: location,
               id: `change_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -1736,7 +1779,7 @@ IMPORTANT: You can ONLY read and edit content within ARTICLE ${articleName}. All
 
 CRITICAL: PRESERVE FORMATTING - When extracting text from the user's instruction to insert, you MUST preserve all newlines (\\n), line breaks, and indentation exactly as provided. Do NOT normalize, trim, or modify the formatting of the text to insert. The text parameter should contain the exact formatting including newline characters.
 
-CRITICAL: FULL REPLACEMENT TEXT - For editDocument, newText MUST contain the COMPLETE replacement. Do NOT truncate, abbreviate, or cut off the text. Include every word and line the user specified for the replacement.
+CRITICAL: FULL REPLACEMENT TEXT - For editDocument, newText MUST contain the COMPLETE replacement. Do NOT truncate, abbreviate, or cut off the text. Include every word the user specified. If the replacement is one sentence that the user wrote across multiple lines, we treat it as ONE bullet (one numbered item); only use multiple lines when the user explicitly specifies separate numbered sub-points (e.g. "1.2 ... 1.3 ... 1.4 ...").
 
 CRITICAL: INSTRUCTION-ONLY SEARCHES - You MUST ONLY search for content explicitly mentioned in the current instruction. Do NOT search for content from article previews, previous steps, or any other context. Every readDocument query MUST include content from the current instruction only.
 
@@ -1767,6 +1810,7 @@ MANDATORY WORKFLOW - FOLLOW THIS EXACTLY:
    - For "Delete and substitute"/"Replace"/"Substitute" instructions:
      - Use editDocument (NOT deleteText + insertText). This keeps the same bullet/number and shows green new + red struck-through old in that item.
      - If the instruction references numbered paragraphs (e.g., "1.2", "1.3"), set searchText to that label (e.g., "1.3") and set newText to the COMPLETE replacement content. Do NOT truncate or cut off newText—include the full replacement.
+     - One sentence across multiple lines = one bullet. If the user gives a single sentence broken across lines (and does not specify separate points like 1.2, 1.3), send the full text as newText; it will be combined into one numbered item. Only send multiple lines when the user explicitly intends multiple numbered sub-points.
      - editDocument operates on that section (e.g. all content from "1.3" until the next sibling "1.4" or parent "2.") within the same list item.
      - Only use insertText for true additions (e.g., "Add the following paragraph before ...") where no existing text is being replaced.
    - Call the appropriate tool with the matchText as searchText
