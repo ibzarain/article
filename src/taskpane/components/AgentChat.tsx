@@ -94,6 +94,7 @@ const createStyles = (isLight: boolean): any => ({
   },
   assistantMessage: {
     alignSelf: "flex-start",
+    maxWidth: "100%",
   },
   messageBubble: {
     padding: "12px 16px",
@@ -417,11 +418,11 @@ const createStyles = (isLight: boolean): any => ({
   thinking: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
+    alignSelf: "flex-start",
     color: isLight ? "#656d76" : "#8b949e",
     fontSize: "12px",
     fontStyle: "normal",
-    padding: "8px 16px",
+    padding: "8px 0",
   },
   emptyState: {
     display: "flex",
@@ -451,6 +452,7 @@ const createStyles = (isLight: boolean): any => ({
     display: "flex",
     flexDirection: "column",
     gap: "6px",
+    width: "100%",
   },
   checklistHeader: {
     fontSize: "10px",
@@ -521,6 +523,7 @@ const createStyles = (isLight: boolean): any => ({
     borderRadius: "8px",
     overflow: "hidden",
     backgroundColor: isLight ? "#f6f8fa" : "#161b22",
+    width: "100%",
   },
   changeHeader: {
     display: "flex",
@@ -536,11 +539,13 @@ const createStyles = (isLight: boolean): any => ({
     alignItems: "center",
     gap: "8px",
     minWidth: 0,
+    flex: 1,
   },
   changeHeaderMeta: {
     display: "flex",
     flexDirection: "column",
     minWidth: 0,
+    flex: 1,
   },
   changeHeaderSecondary: {
     fontSize: "11px",
@@ -549,7 +554,8 @@ const createStyles = (isLight: boolean): any => ({
     whiteSpace: "nowrap",
     overflow: "hidden",
     textOverflow: "ellipsis",
-    maxWidth: "520px",
+    minWidth: 0,
+    flex: 1,
   },
   decisionPill: {
     padding: "2px 6px",
@@ -686,11 +692,8 @@ const createStyles = (isLight: boolean): any => ({
     justifyContent: "center",
     marginTop: "2px",
     marginBottom: "-2px",
-  },
-  changeContentToggleBtn: {
-    display: "flex",
-    alignItems: "center",
-    padding: "0 4px",
+    width: "100%",
+    padding: "8px 0",
     border: "none",
     background: "none",
     cursor: "pointer",
@@ -727,6 +730,7 @@ const createStyles = (isLight: boolean): any => ({
     display: "flex",
     flexDirection: "column",
     gap: "8px",
+    width: "100%",
   },
 });
 
@@ -1079,7 +1083,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
               } else if (stepChanges.length === 0) {
                 stepContent = "No changes were necessary.";
               } else {
-                stepContent = `Proposed ${stepChanges.length} change(s). Review and accept/reject below.`;
+                stepContent = `Proposed ${stepChanges.length} ${stepChanges.length === 1 ? "change" : "changes"}. Review and accept/reject below.`;
               }
             } else if (!stepContent) {
               stepContent = `Step ${i + 1} complete.`;
@@ -1148,7 +1152,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
         } else if (messageChanges.length === 0) {
           response = "No changes were necessary.";
         } else {
-          response = `Proposed ${messageChanges.length} change(s). Review and accept/reject below.`;
+          response = `Proposed ${messageChanges.length} ${messageChanges.length === 1 ? "change" : "changes"}. Review and accept/reject below.`;
         }
       }
 
@@ -1381,8 +1385,8 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
     });
   };
 
-  const CHECKLIST_PREVIEW_LEN = 80;
-  const CHANGE_CONTENT_PREVIEW_LEN = 80;
+  const CHECKLIST_PREVIEW_LEN = 220;
+  const CHANGE_CONTENT_PREVIEW_LEN = 220;
 
   return (
     <div className={styles.container}>
@@ -1658,21 +1662,19 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                                   return null;
                                 };
                                 const renderToggle = () => (
-                                  <div className={styles.changeContentToggleRow}>
-                                    <button
-                                      type="button"
-                                      className={styles.changeContentToggleBtn}
-                                      onClick={() => toggleChangeContent(change.id)}
-                                      aria-expanded={expanded}
-                                      title={expanded ? "Collapse" : "Expand"}
-                                    >
-                                      {expanded ? (
-                                        <ChevronUpRegular style={{ fontSize: "14px" }} />
-                                      ) : (
-                                        <ChevronDownRegular style={{ fontSize: "14px" }} />
-                                      )}
-                                    </button>
-                                  </div>
+                                  <button
+                                    type="button"
+                                    className={styles.changeContentToggleRow}
+                                    onClick={() => toggleChangeContent(change.id)}
+                                    aria-expanded={expanded}
+                                    title={expanded ? "Collapse" : "Expand"}
+                                  >
+                                    {expanded ? (
+                                      <ChevronUpRegular style={{ fontSize: "14px" }} />
+                                    ) : (
+                                      <ChevronDownRegular style={{ fontSize: "14px" }} />
+                                    )}
+                                  </button>
                                 );
                                 if (isExpandable) {
                                   return (
