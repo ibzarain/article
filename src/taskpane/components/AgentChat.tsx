@@ -674,6 +674,27 @@ const createStyles = (isLight: boolean): any => ({
     whiteSpace: "pre-wrap",
     wordBreak: "break-word",
   },
+  diffLinePreview: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap" as const,
+    marginBottom: "4px",
+  },
+  changeContentToggleRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    marginTop: "4px",
+  },
+  changeContentToggleBtn: {
+    display: "flex",
+    alignItems: "center",
+    padding: "2px 4px",
+    border: "none",
+    background: "none",
+    cursor: "pointer",
+    color: isLight ? "#57606a" : "#8b949e",
+  },
   diffOld: {
     backgroundColor: isLight ? "#ffebe9" : "#5a1d1d",
     color: isLight ? "#cf222e" : "#f48771",
@@ -1383,6 +1404,16 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                           ? step.text
                           : step.text.slice(0, CHECKLIST_PREVIEW_LEN) + "…";
                         const canExpand = step.text.length > CHECKLIST_PREVIEW_LEN;
+                        const expandedContent = canExpand
+                          ? (() => {
+                              const afterPreview = step.text.slice(CHECKLIST_PREVIEW_LEN);
+                              const firstNewline = afterPreview.indexOf("\n");
+                              const rest = firstNewline >= 0
+                                ? afterPreview.slice(firstNewline + 1)
+                                : afterPreview;
+                              return rest.trimStart();
+                            })()
+                          : "";
                         return (
                           <div key={step.id} className={styles.checklistItem}>
                             <div className={styles.checklistIcon}>
@@ -1416,9 +1447,9 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                                       )}
                                     </span>
                                   </button>
-                                  {expanded && (
+                                  {expanded && expandedContent && (
                                     <div className={styles.checklistText} style={{ whiteSpace: "pre-wrap", marginTop: "4px" }}>
-                                      {step.text}
+                                      {expandedContent}
                                     </div>
                                   )}
                                 </>
@@ -1528,26 +1559,8 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                               {(() => {
                                 const fullOld = change.oldText ?? "";
                                 const fullNew = change.newText ?? "";
-                                const getPreview = () => {
-                                  if (change.type === "edit") {
-                                    const combined = fullOld || fullNew;
-                                    return combined.length > CHANGE_CONTENT_PREVIEW_LEN
-                                      ? combined.slice(0, CHANGE_CONTENT_PREVIEW_LEN) + "…"
-                                      : combined || "";
-                                  }
-                                  if (change.type === "insert" && fullNew) {
-                                    return fullNew.length > CHANGE_CONTENT_PREVIEW_LEN
-                                      ? fullNew.slice(0, CHANGE_CONTENT_PREVIEW_LEN) + "…"
-                                      : fullNew;
-                                  }
-                                  if (change.type === "delete" && fullOld) {
-                                    return fullOld.length > CHANGE_CONTENT_PREVIEW_LEN
-                                      ? fullOld.slice(0, CHANGE_CONTENT_PREVIEW_LEN) + "…"
-                                      : fullOld;
-                                  }
-                                  return "";
-                                };
-                                const preview = getPreview();
+                                const trunc = (s: string, len: number) =>
+                                  s.length > len ? s.slice(0, len) + "…" : s;
                                 const isExpandable =
                                   (change.type === "edit" && (fullOld.length > CHANGE_CONTENT_PREVIEW_LEN || fullNew.length > CHANGE_CONTENT_PREVIEW_LEN)) ||
                                   (change.type === "insert" && fullNew.length > CHANGE_CONTENT_PREVIEW_LEN) ||
@@ -1561,59 +1574,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                                     </div>
                                   );
                                 }
-                                if (isExpandable) {
-                                  return (
-                                    <>
-                                      <button
-                                        type="button"
-                                        className={styles.changeContentPreviewRow}
-                                        onClick={() => toggleChangeContent(change.id)}
-                                        aria-expanded={expanded}
-                                        title="Toggle full diff"
-                                      >
-                                        <span className={styles.changeContentPreviewText}>
-                                          {expanded ? (change.type === "edit" ? "− … + …" : change.type === "insert" ? "+ …" : "− …") : preview}
-                                        </span>
-                                        <span className={styles.changeContentExpandIcon}>
-                                          {expanded ? (
-                                            <ChevronUpRegular style={{ fontSize: "14px" }} />
-                                          ) : (
-                                            <ChevronDownRegular style={{ fontSize: "14px" }} />
-                                          )}
-                                        </span>
-                                      </button>
-                                      {expanded && (
-                                        <div style={{ marginTop: "4px" }}>
-                                          {change.type === "edit" && (
-                                            <>
-                                              {change.oldText && (
-                                                <div className={`${styles.diffLine} ${styles.diffOld}`}>
-                                                  <span style={{ opacity: 0.7 }}>−</span> {change.oldText}
-                                                </div>
-                                              )}
-                                              {change.newText && (
-                                                <div className={`${styles.diffLine} ${styles.diffNew}`}>
-                                                  <span style={{ opacity: 0.7 }}>+</span> {change.newText}
-                                                </div>
-                                              )}
-                                            </>
-                                          )}
-                                          {change.type === "insert" && change.newText && (
-                                            <div className={`${styles.diffLine} ${styles.diffInsert}`}>
-                                              <span style={{ opacity: 0.7 }}>+</span> {change.newText}
-                                            </div>
-                                          )}
-                                          {change.type === "delete" && change.oldText && (
-                                            <div className={`${styles.diffLine} ${styles.diffDelete}`}>
-                                              <span style={{ opacity: 0.7 }}>−</span> {change.oldText}
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
-                                    </>
-                                  );
-                                }
-                                return (
+                                const renderFullDiff = () => (
                                   <>
                                     {change.type === "edit" && (
                                       <>
@@ -1641,6 +1602,65 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                                     )}
                                   </>
                                 );
+                                const renderCollapsedPreview = () => {
+                                  if (change.type === "edit") {
+                                    return (
+                                      <>
+                                        {fullOld ? (
+                                          <div className={`${styles.diffLine} ${styles.diffOld} ${styles.diffLinePreview}`}>
+                                            <span style={{ opacity: 0.7 }}>−</span> {trunc(fullOld, CHANGE_CONTENT_PREVIEW_LEN)}
+                                          </div>
+                                        ) : null}
+                                        {fullNew ? (
+                                          <div className={`${styles.diffLine} ${styles.diffNew} ${styles.diffLinePreview}`}>
+                                            <span style={{ opacity: 0.7 }}>+</span> {trunc(fullNew, CHANGE_CONTENT_PREVIEW_LEN)}
+                                          </div>
+                                        ) : null}
+                                      </>
+                                    );
+                                  }
+                                  if (change.type === "insert" && fullNew) {
+                                    return (
+                                      <div className={`${styles.diffLine} ${styles.diffInsert} ${styles.diffLinePreview}`}>
+                                        <span style={{ opacity: 0.7 }}>+</span> {trunc(fullNew, CHANGE_CONTENT_PREVIEW_LEN)}
+                                      </div>
+                                    );
+                                  }
+                                  if (change.type === "delete" && fullOld) {
+                                    return (
+                                      <div className={`${styles.diffLine} ${styles.diffDelete} ${styles.diffLinePreview}`}>
+                                        <span style={{ opacity: 0.7 }}>−</span> {trunc(fullOld, CHANGE_CONTENT_PREVIEW_LEN)}
+                                      </div>
+                                    );
+                                  }
+                                  return null;
+                                };
+                                const renderToggle = () => (
+                                  <div className={styles.changeContentToggleRow}>
+                                    <button
+                                      type="button"
+                                      className={styles.changeContentToggleBtn}
+                                      onClick={() => toggleChangeContent(change.id)}
+                                      aria-expanded={expanded}
+                                      title={expanded ? "Collapse" : "Expand"}
+                                    >
+                                      {expanded ? (
+                                        <ChevronUpRegular style={{ fontSize: "14px" }} />
+                                      ) : (
+                                        <ChevronDownRegular style={{ fontSize: "14px" }} />
+                                      )}
+                                    </button>
+                                  </div>
+                                );
+                                if (isExpandable) {
+                                  return (
+                                    <>
+                                      {expanded ? renderFullDiff() : renderCollapsedPreview()}
+                                      {renderToggle()}
+                                    </>
+                                  );
+                                }
+                                return renderFullDiff();
                               })()}
                             </div>
                           </div>
