@@ -432,7 +432,9 @@ function createScopedReadDocumentTool(
 function createScopedEditTools(
   articleBoundaries: ArticleBoundaries,
   articleName: string,
-  readState: ScopedReadState
+  readState: ScopedReadState,
+  apiKey: string,
+  model: string
 ) {
   const normalizeLeadingWhitespace = (value: string) => value.replace(/^\s+/, '');
   const isNumberedParagraphLabel = (value: string) => /^\s*\d+\.\d+\s*$/.test(value);
@@ -534,6 +536,75 @@ function createScopedEditTools(
 
     // Join blocks with a single newline (paragraph break) to avoid inserting empty list items.
     return normalizedBlocks.join('\n').trim();
+  };
+
+  /**
+   * Uses AI to reflow line breaks WITHOUT changing wording/punctuation.
+   * This is intentionally stricter than "rewrite": it may ONLY adjust whitespace/newlines.
+   *
+   * If AI output appears to change non-whitespace characters, we fall back to a local heuristic.
+   */
+  const reflowWithAiPreserveWording = async (text: string): Promise<string> => {
+    const raw = (text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+    if (!raw || !raw.includes('\n')) return raw;
+
+    const stripWs = (value: string) => value.replace(/\s+/g, '');
+
+    try {
+      const prompt = `Reflow the following text by fixing ONLY whitespace/newlines.
+
+Rules:
+- DO NOT change any non-whitespace characters (letters, numbers, punctuation). No rewording, no capitalization changes.
+- You may ONLY: add/remove spaces/tabs/newlines.
+- Join wrapped lines within the same sentence/paragraph/list item onto one line.
+- Preserve headings on their own line (e.g., lines starting with "ARTICLE", "SECTION", or ALL CAPS headings).
+- Preserve lead-in lines ending with ":" on their own line.
+- Preserve list items as separate lines. List item prefixes may look like:
+  - "-", "*", "•"
+  - "1.", "1)", "1.2", "1.2.3"
+  - ".1", ".2", ".3"
+  - "(a)", "a)", "(i)"
+- If a list item's text wraps to the next line, join the continuation line back onto the same list item line.
+- Preserve blank lines between paragraphs.
+
+Return ONLY the reflowed text (no quotes, no code fences).`;
+
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: 'You are a strict text reflow tool. Output plain text only.' },
+            { role: 'user', content: `${prompt}\n\n---\n${raw}` },
+          ],
+          temperature: 0.0,
+          max_tokens: 1200,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        throw new Error(`Reflow API error: ${response.status} ${errorText}`.trim());
+      }
+
+      const data = await response.json();
+      const outRaw = (data?.choices?.[0]?.message?.content ?? '').toString();
+      const out = outRaw.replace(/```[\s\S]*?```/g, m => m.replace(/```/g, '')).trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+      // Safety: ensure only whitespace changed.
+      if (stripWs(out) !== stripWs(raw)) {
+        throw new Error('AI reflow changed non-whitespace characters; falling back to heuristic.');
+      }
+
+      return out;
+    } catch (e) {
+      console.warn('[reflowWithAiPreserveWording] Falling back to heuristic:', e);
+      return collapseToSingleSentenceIfNoExplicitPoints(raw);
+    }
   };
 
   const findParagraphByNumberLabel = async (
@@ -762,20 +833,15 @@ function createScopedEditTools(
               }
               const fullSectionText = sectionTexts.join('\n');
 
-              // Normalize the new text (strip leading label if list item; collapse multi-line to one sentence when no explicit sub-points)
-              let normalizedNewText = isListItem ? stripLeadingLabel(label, newText) : newText;
-              normalizedNewText = collapseToSingleSentenceIfNoExplicitPoints(normalizedNewText);
-
               console.log(`[editDocument] Replacing section "${label}": paragraphs ${targetStartRelIdx} to ${targetEndRelIdx} (${targetEndRelIdx - targetStartRelIdx + 1} paragraph(s))`);
               console.log(`[editDocument] Old content (${fullSectionText.length} chars): ${fullSectionText.substring(0, 200)}...`);
-              console.log(`[editDocument] New content (${normalizedNewText.length} chars): ${normalizedNewText.substring(0, 200)}...`);
 
               return {
                 oldText: fullSectionText,
-                newText: normalizedNewText,
                 targetParagraphIndex: paragraphInfos[targetStartRelIdx].index,
                 targetEndParagraphIndex: paragraphInfos[targetEndRelIdx].index,
                 paragraphCount: targetEndRelIdx - targetStartRelIdx + 1,
+                isListItem,
               };
             }
 
@@ -795,21 +861,25 @@ function createScopedEditTools(
             context.load(target, 'text');
             await context.sync();
 
-            const normalizedNew = collapseToSingleSentenceIfNoExplicitPoints(newText);
             return {
               oldText: target.text,
-              newText: normalizedNew,
               targetParagraphIndex: undefined as number | undefined,
               targetEndParagraphIndex: undefined as number | undefined,
               paragraphCount: 1,
+              isListItem: false,
             };
           });
+
+          // Reflow newText (AI-driven) WITHOUT changing wording.
+          let normalizedNewText = located.isListItem && label ? stripLeadingLabel(label, newText) : newText;
+          normalizedNewText = await reflowWithAiPreserveWording(normalizedNewText);
+          console.log(`[editDocument] New content (${normalizedNewText.length} chars): ${normalizedNewText.substring(0, 200)}...`);
 
           const changeObj: DocumentChange = {
             type: 'edit',
             description: `Replaced section "${searchText}" (${located.paragraphCount} paragraph(s))`,
             oldText: located.oldText,
-            newText: located.newText,
+            newText: normalizedNewText,
             // IMPORTANT: use oldText as the searchText so the inline diff targets the full existing content.
             searchText: located.oldText,
             id: `change_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -881,8 +951,8 @@ function createScopedEditTools(
         try {
           ensureFreshRead('insertText');
           const warnings: string[] = [];
-          // One sentence across lines with no explicit sub-points (1.2, 1.3) → treat as one bullet
-          const normalizedText = collapseToSingleSentenceIfNoExplicitPoints(text || '');
+          // Use AI reflow to decide when to join wrapped lines vs keep list structure.
+          const normalizedText = await reflowWithAiPreserveWording(text || '');
           const labelOnly = searchText ? isNumberedParagraphLabel(searchText) : false;
           const label = searchText ? extractNumberedLabel(searchText) : '';
 
@@ -1793,7 +1863,7 @@ export async function executeArticleInstructionsHybrid(
     const requiredTokens = extractInstructionContext(instruction);
     const readGuard: ScopedReadGuard = { requiredTokens };
     const scopedReadDocument = createScopedReadDocumentTool(articleBoundaries, readState, readGuard, apiKey, model);
-    const scopedEditTools = createScopedEditTools(articleBoundaries, articleName, readState);
+    const scopedEditTools = createScopedEditTools(articleBoundaries, articleName, readState, apiKey, model);
 
     // Create a scoped agent with only article content
     const scopedAgent = {
@@ -1807,7 +1877,7 @@ export async function executeArticleInstructionsHybrid(
 
 IMPORTANT: You can ONLY read and edit content within ARTICLE ${articleName}. All your tools are scoped to this article only.
 
-CRITICAL: PRESERVE FORMATTING - When extracting text from the user's instruction to insert, you MUST preserve all newlines (\\n), line breaks, and indentation exactly as provided. Do NOT normalize, trim, or modify the formatting of the text to insert. The text parameter should contain the exact formatting including newline characters.
+CRITICAL: PRESERVE WORDING - Do NOT rephrase. Keep all non-whitespace characters (letters/numbers/punctuation) exactly the same as the user provided. You may include line breaks as typed; the tool will intelligently reflow line breaks (join wrapped lines, keep headings/list items) while preserving wording.
 
 CRITICAL: FULL REPLACEMENT TEXT - For editDocument, newText MUST contain the COMPLETE replacement. Do NOT truncate, abbreviate, or cut off the text. Include every word the user specified. If the replacement is one sentence that the user wrote across multiple lines, we treat it as ONE bullet (one numbered item); only use multiple lines when the user explicitly specifies separate numbered sub-points (e.g. "1.2 ... 1.3 ... 1.4 ...").
 
@@ -1816,7 +1886,7 @@ CRITICAL: INSTRUCTION-ONLY SEARCHES - You MUST ONLY search for content explicitl
 AVAILABLE TOOLS:
 - readDocument: SEARCH tool - Search ARTICLE ${articleName} for a query and return contextual snippets around each match. MANDATORY: Call this BEFORE any insert/edit/delete to find the exact location text (use matchText as searchText). CRITICAL: You can ONLY search for content explicitly mentioned in the current instruction. Wildcard queries ("*" or "all") are NOT allowed.
 - editDocument: Find and replace text within ARTICLE ${articleName} only. REPLACE keeps the same bullet/number—only the wording changes (green new, red old). For "1.2" or "1.3", set searchText to that label and set newText to the COMPLETE replacement; do not truncate newText. Requires searchText from readDocument results.
-- insertText: Insert new text within ARTICLE ${articleName} only. MANDATORY: Requires searchText from readDocument results. If user says "before X", you MUST find X via readDocument first, then use that matchText as searchText with location: "before". IMPORTANT: When extracting the text to insert from the user's instruction, preserve ALL newlines (\\n) and formatting exactly as provided. The text parameter must include newline characters where the user has line breaks.
+- insertText: Insert new text within ARTICLE ${articleName} only. MANDATORY: Requires searchText from readDocument results. If user says "before X", you MUST find X via readDocument first, then use that matchText as searchText with location: "before". IMPORTANT: Preserve wording exactly; line breaks may be provided as typed and will be reflowed intelligently by the tool (wrapped lines joined, headings/list items preserved).
 - deleteText: Delete text from ARTICLE ${articleName} only. For numbered sections like "1.2", this deletes the ENTIRE section (all paragraphs from "1.2" until the next sibling "1.3" or parent "2."). Requires searchText from readDocument results.
 
 MANDATORY WORKFLOW - FOLLOW THIS EXACTLY:
