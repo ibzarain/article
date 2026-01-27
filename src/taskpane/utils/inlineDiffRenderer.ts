@@ -53,6 +53,10 @@ async function scopedSearch(
 export async function renderInlineDiff(change: DocumentChange): Promise<void> {
   try {
     await Word.run(async (context) => {
+      // Word list numbering increments on new paragraphs. Use a soft line break (Shift+Enter)
+      // so old+new stay within the same numbered/bulleted item (e.g., keep "1.2", avoid creating "1.3").
+      const SOFT_LINE_BREAK = '\u000b';
+
       if (change.type === 'edit' && change.searchText && change.oldText && change.newText) {
         // Check if this is a multi-paragraph edit
         if (
@@ -85,7 +89,8 @@ export async function renderInlineDiff(change: DocumentChange): Promise<void> {
           targetRange.font.color = '#89d185'; // Green color
           await context.sync();
 
-          const oldRange = targetRange.insertText(`\n${change.oldText}`, Word.InsertLocation.after);
+          // Insert old text after new text using a soft break so it remains in the same list item.
+          const oldRange = targetRange.insertText(`${SOFT_LINE_BREAK}${change.oldText}`, Word.InsertLocation.after);
           await context.sync();
 
           oldRange.font.strikeThrough = true;
@@ -121,7 +126,8 @@ export async function renderInlineDiff(change: DocumentChange): Promise<void> {
           await context.sync();
 
           // Insert old text after new text (strikethrough, red), so it starts at the same spot.
-          const oldRange = range.insertText(`\n${oldTextDisplay}`, Word.InsertLocation.after);
+          // Use a soft break to avoid creating a new list item number.
+          const oldRange = range.insertText(`${SOFT_LINE_BREAK}${oldTextDisplay}`, Word.InsertLocation.after);
           await context.sync();
 
           // Apply strikethrough and red color to old text

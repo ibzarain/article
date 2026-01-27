@@ -1556,7 +1556,7 @@ Return ONLY the reflowed text (no quotes, no code fences).`;
       },
     },
     deleteText: {
-      description: 'Delete text from the article. For numbered sections (e.g., "1.2"), deletes the ENTIRE section including all content until the next sibling section. Only works within the current article section.',
+      description: 'Delete text from the article (pure deletion only). For numbered sections (e.g., "1.2"), deletes the ENTIRE section including all content until the next sibling section. Only works within the current article section. IMPORTANT: If the user says "delete ... and substitute/replace", do NOT use deleteText + insertText (Word will renumber and it becomes confusing). Use editDocument so the diff stays within the same numbered item.',
       parameters: {
         type: 'object',
         properties: {
@@ -1909,6 +1909,7 @@ MANDATORY WORKFLOW - FOLLOW THIS EXACTLY:
    - If multiple matches, use the first one (or the one that makes sense in context)
    - For "Delete and substitute"/"Replace"/"Substitute" instructions:
      - Use editDocument (NOT deleteText + insertText). This keeps the same bullet/number and shows green new + red struck-through old in that item.
+     - NEVER use deleteText + insertText for substitutions, especially with numbered labels like "1.2". Word will renumber and you end up with a confusing crossed-out "1.2" and a green "1.3". editDocument keeps everything inside the original "1.2" item.
      - If the instruction references numbered paragraphs (e.g., "1.2", "1.3"), set searchText to that label (e.g., "1.3") and set newText to the COMPLETE replacement content. Do NOT truncate or cut off newText—include the full replacement.
      - One sentence across multiple lines = one bullet. If the user gives a single sentence broken across lines (and does not specify separate points like 1.2, 1.3), send the full text as newText; it will be combined into one numbered item. Only send multiple lines when the user explicitly intends multiple numbered sub-points.
      - editDocument operates on that section (e.g. all content from "1.3" until the next sibling "1.4" or parent "2.") within the same list item.

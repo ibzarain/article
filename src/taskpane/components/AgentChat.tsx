@@ -130,7 +130,7 @@ const createStyles = (isLight: boolean): any => ({
     backgroundColor: isLight ? "#ffffff" : "#0d1117",
     border: isLight ? "1px solid #d0d7de" : "1px solid #30363d",
     borderRadius: "8px",
-    padding: "4px 4px 6px 4px",
+    padding: "4px 4px 4px 4px",
     "&:focus-within": {
       borderColor: "#1f6feb",
       boxShadow: isLight ? "0 0 0 3px rgba(31, 111, 235, 0.15)" : "0 0 0 3px rgba(31, 111, 235, 0.1)",
