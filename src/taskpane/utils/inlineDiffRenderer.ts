@@ -58,41 +58,38 @@ export async function renderInlineDiff(change: DocumentChange): Promise<void> {
         if (
           typeof change.targetParagraphIndex === 'number' &&
           typeof change.targetEndParagraphIndex === 'number' &&
-          change.targetEndParagraphIndex > change.targetParagraphIndex
+          change.targetEndParagraphIndex >= change.targetParagraphIndex
         ) {
-          // Multi-paragraph edit: 
-          // 1. Insert new text (green) before the first paragraph
-          // 2. Apply strikethrough/red to all old paragraphs
+          // In-place replacement: keep the same bullet/number, replace content within the existing paragraph(s).
+          // Do NOT insert a new paragraph — replace the content of the target range so green new + red old
+          // appear in the same list item(s).
           const paragraphs = context.document.body.paragraphs;
           context.load(paragraphs, 'items');
           await context.sync();
 
           const firstParagraph = paragraphs.items[change.targetParagraphIndex];
-          if (!firstParagraph) {
-            console.warn(`Target paragraph ${change.targetParagraphIndex} not found`);
+          const lastParagraph = paragraphs.items[change.targetEndParagraphIndex];
+          if (!firstParagraph || !lastParagraph) {
+            console.warn(`Target paragraph range ${change.targetParagraphIndex}..${change.targetEndParagraphIndex} not found`);
             return;
           }
 
-          // Insert new text before the first paragraph
-          const newParagraph = firstParagraph.insertParagraph(change.newText, Word.InsertLocation.before);
-          newParagraph.font.color = '#89d185'; // Green color
+          const startRange = firstParagraph.getRange('Start');
+          const endRange = lastParagraph.getRange('End');
+          const targetRange = startRange.expandTo(endRange);
+
+          // Replace content in place: new text (green) then old text (red strikethrough)
+          targetRange.insertText(change.newText, Word.InsertLocation.replace);
           await context.sync();
 
-          // Apply strikethrough and red to all old paragraphs
-          for (let i = change.targetParagraphIndex; i <= change.targetEndParagraphIndex; i++) {
-            // Re-fetch paragraphs since we inserted a new one
-            const updatedParagraphs = context.document.body.paragraphs;
-            context.load(updatedParagraphs, 'items');
-            await context.sync();
+          targetRange.font.color = '#89d185'; // Green color
+          await context.sync();
 
-            // The indices shifted by 1 since we inserted a paragraph before
-            const p = updatedParagraphs.items[i + 1];
-            if (p) {
-              const pRange = p.getRange('Whole');
-              pRange.font.strikeThrough = true;
-              pRange.font.color = '#f48771';
-            }
-          }
+          const oldRange = targetRange.insertText(`\n${change.oldText}`, Word.InsertLocation.after);
+          await context.sync();
+
+          oldRange.font.strikeThrough = true;
+          oldRange.font.color = '#f48771'; // Red color
           await context.sync();
         } else {
           // Single paragraph edit or text-based search
@@ -252,51 +249,44 @@ export async function acceptInlineChange(change: DocumentChange): Promise<void> 
   try {
     await Word.run(async (context) => {
       if (change.type === 'edit' && change.newText && change.oldText) {
-        // Check if this is a multi-paragraph edit
+        // Check if this is a multi-paragraph edit (in-place: same bullet, content replaced)
         if (
           typeof change.targetParagraphIndex === 'number' &&
           typeof change.targetEndParagraphIndex === 'number' &&
-          change.targetEndParagraphIndex > change.targetParagraphIndex
+          change.targetEndParagraphIndex >= change.targetParagraphIndex
         ) {
-          // Multi-paragraph edit: 
-          // 1. Remove green color from new text paragraph (it was inserted before targetParagraphIndex)
-          // 2. Delete all old paragraphs (strikethrough red)
+          // In-place edit: target range holds newText (green) + "\n" + oldText (red). Accept = keep new, remove red.
           const paragraphs = context.document.body.paragraphs;
           context.load(paragraphs, 'items');
           await context.sync();
 
-          // The new text paragraph is right before targetParagraphIndex
-          // But since we inserted it, the indices have shifted
-          // First, find and fix the green paragraph
-          for (let i = 0; i < paragraphs.items.length; i++) {
-            const p = paragraphs.items[i];
-            context.load(p, 'font');
-            await context.sync();
+          const firstP = paragraphs.items[change.targetParagraphIndex];
+          const lastP = paragraphs.items[change.targetEndParagraphIndex];
+          if (!firstP || !lastP) return;
 
-            if (p.font.color === '#89d185') {
-              p.font.color = null;
+          const root = firstP.getRange('Start').expandTo(lastP.getRange('End'));
+          const newTextResults = await scopedSearch(context, root, change.newText);
+          const oldTextResults = await scopedSearch(context, root, change.oldText);
+
+          for (const range of newTextResults.items) {
+            context.load(range, ['text', 'font']);
+            await context.sync();
+            if (range.text.trim() === change.newText!.trim() && range.font.color === '#89d185') {
+              range.font.color = null;
+              await context.sync();
               break;
             }
           }
-          await context.sync();
 
-          // Refresh paragraphs and delete old content (red strikethrough)
-          const updatedParagraphs = context.document.body.paragraphs;
-          context.load(updatedParagraphs, 'items');
-          await context.sync();
-
-          // Find and delete all red strikethrough paragraphs
-          // Go in reverse to avoid index issues
-          for (let i = updatedParagraphs.items.length - 1; i >= 0; i--) {
-            const p = updatedParagraphs.items[i];
-            context.load(p, 'font');
+          for (const range of oldTextResults.items) {
+            context.load(range, ['text', 'font']);
             await context.sync();
-
-            if (p.font.strikeThrough && p.font.color === '#f48771') {
-              p.delete();
+            if (range.text.trim() === change.oldText!.trim() && range.font.strikeThrough && range.font.color === '#f48771') {
+              range.delete();
+              await context.sync();
+              break;
             }
           }
-          await context.sync();
         } else {
           const root = await resolveScopedSearchRoot(context, change);
           // Find the new text (green highlighted) and old text (strikethrough red)
@@ -410,49 +400,45 @@ export async function rejectInlineChange(change: DocumentChange): Promise<void> 
   try {
     await Word.run(async (context) => {
       if (change.type === 'edit' && change.oldText && change.newText) {
-        // Check if this is a multi-paragraph edit
+        // Check if this is a multi-paragraph edit (in-place)
         if (
           typeof change.targetParagraphIndex === 'number' &&
           typeof change.targetEndParagraphIndex === 'number' &&
-          change.targetEndParagraphIndex > change.targetParagraphIndex
+          change.targetEndParagraphIndex >= change.targetParagraphIndex
         ) {
-          // Multi-paragraph edit rejection:
-          // 1. Delete the green (new) paragraph
-          // 2. Remove strikethrough/red from old paragraphs
+          // In-place edit rejection: delete green new text, restore old (remove strikethrough/red)
           const paragraphs = context.document.body.paragraphs;
           context.load(paragraphs, 'items');
           await context.sync();
 
-          // Find and delete the green paragraph
-          for (let i = 0; i < paragraphs.items.length; i++) {
-            const p = paragraphs.items[i];
-            context.load(p, 'font');
-            await context.sync();
+          const firstP = paragraphs.items[change.targetParagraphIndex];
+          const lastP = paragraphs.items[change.targetEndParagraphIndex];
+          if (!firstP || !lastP) return;
 
-            if (p.font.color === '#89d185') {
-              p.delete();
+          const root = firstP.getRange('Start').expandTo(lastP.getRange('End'));
+          const newTextResults = await scopedSearch(context, root, change.newText);
+          const oldTextResults = await scopedSearch(context, root, change.oldText);
+
+          for (const range of newTextResults.items) {
+            context.load(range, ['text', 'font']);
+            await context.sync();
+            if (range.text.trim() === change.newText!.trim() && range.font.color === '#89d185') {
+              range.delete();
+              await context.sync();
               break;
             }
           }
-          await context.sync();
 
-          // Refresh paragraphs and restore old content
-          const updatedParagraphs = context.document.body.paragraphs;
-          context.load(updatedParagraphs, 'items');
-          await context.sync();
-
-          // Remove strikethrough/red from old paragraphs
-          for (let i = 0; i < updatedParagraphs.items.length; i++) {
-            const p = updatedParagraphs.items[i];
-            context.load(p, 'font');
+          for (const range of oldTextResults.items) {
+            context.load(range, ['text', 'font']);
             await context.sync();
-
-            if (p.font.strikeThrough && p.font.color === '#f48771') {
-              p.font.strikeThrough = false;
-              p.font.color = null;
+            if (range.text.trim() === change.oldText!.trim() && range.font.strikeThrough && range.font.color === '#f48771') {
+              range.font.strikeThrough = false;
+              range.font.color = null;
+              await context.sync();
+              break;
             }
           }
-          await context.sync();
         } else {
           const root = await resolveScopedSearchRoot(context, change);
           // Remove new text (green highlighted), restore old text (remove strikethrough)

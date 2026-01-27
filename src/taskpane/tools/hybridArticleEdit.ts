@@ -507,12 +507,12 @@ function createScopedEditTools(
 
   return {
     editDocument: {
-      description: 'Edit or replace text in the article. For numbered sections (e.g., "1.2"), replaces the ENTIRE section including all content until the next sibling section. Automatically preserves all formatting. Only edits within the current article section.',
+      description: 'Edit or replace text in the article. REPLACE keeps the same bullet/number: it changes only the wording inside that item (green new, red struck-through old). For numbered sections (e.g., "1.2"), operates on that section until the next sibling (e.g. "1.3"). newText must be the COMPLETE replacement—do not truncate or abbreviate. Only edits within the current article section.',
       parameters: {
         type: 'object',
         properties: {
-          searchText: { type: 'string', description: 'The text to find and replace in the article. For numbered paragraphs like "1.2", replaces the entire section (all content until the next sibling like "1.3" or parent like "2.")' },
-          newText: { type: 'string', description: 'The new text to replace the found text with' },
+          searchText: { type: 'string', description: 'The text or paragraph label to find (e.g. "1.2" or "1.3"). For labels like "1.2", replaces that entire section until the next sibling like "1.3" or parent like "2."—all within the same bullet/number.' },
+          newText: { type: 'string', description: 'The COMPLETE new text to replace the found text with. Include the full replacement—do not cut off or abbreviate. Preserve line breaks (\\n) if the section has multiple lines.' },
           replaceAll: { type: 'boolean', description: 'If true, replaces all occurrences. If false, replaces only the first occurrence.' },
           matchCase: { type: 'boolean', description: 'Whether the search should be case-sensitive' },
           matchWholeWord: { type: 'boolean', description: 'Whether to match whole words only' },
@@ -1736,11 +1736,13 @@ IMPORTANT: You can ONLY read and edit content within ARTICLE ${articleName}. All
 
 CRITICAL: PRESERVE FORMATTING - When extracting text from the user's instruction to insert, you MUST preserve all newlines (\\n), line breaks, and indentation exactly as provided. Do NOT normalize, trim, or modify the formatting of the text to insert. The text parameter should contain the exact formatting including newline characters.
 
+CRITICAL: FULL REPLACEMENT TEXT - For editDocument, newText MUST contain the COMPLETE replacement. Do NOT truncate, abbreviate, or cut off the text. Include every word and line the user specified for the replacement.
+
 CRITICAL: INSTRUCTION-ONLY SEARCHES - You MUST ONLY search for content explicitly mentioned in the current instruction. Do NOT search for content from article previews, previous steps, or any other context. Every readDocument query MUST include content from the current instruction only.
 
 AVAILABLE TOOLS:
 - readDocument: SEARCH tool - Search ARTICLE ${articleName} for a query and return contextual snippets around each match. MANDATORY: Call this BEFORE any insert/edit/delete to find the exact location text (use matchText as searchText). CRITICAL: You can ONLY search for content explicitly mentioned in the current instruction. Wildcard queries ("*" or "all") are NOT allowed.
-- editDocument: Find and replace text within ARTICLE ${articleName} only. For numbered sections like "1.2", this replaces the ENTIRE section (all paragraphs from "1.2" until the next sibling "1.3" or parent "2."). Requires searchText from readDocument results.
+- editDocument: Find and replace text within ARTICLE ${articleName} only. REPLACE keeps the same bullet/number—only the wording changes (green new, red old). For "1.2" or "1.3", set searchText to that label and set newText to the COMPLETE replacement; do not truncate newText. Requires searchText from readDocument results.
 - insertText: Insert new text within ARTICLE ${articleName} only. MANDATORY: Requires searchText from readDocument results. If user says "before X", you MUST find X via readDocument first, then use that matchText as searchText with location: "before". IMPORTANT: When extracting the text to insert from the user's instruction, preserve ALL newlines (\\n) and formatting exactly as provided. The text parameter must include newline characters where the user has line breaks.
 - deleteText: Delete text from ARTICLE ${articleName} only. For numbered sections like "1.2", this deletes the ENTIRE section (all paragraphs from "1.2" until the next sibling "1.3" or parent "2."). Requires searchText from readDocument results.
 
@@ -1763,9 +1765,9 @@ MANDATORY WORKFLOW - FOLLOW THIS EXACTLY:
    - Use the EXACT matchText from the results as searchText for insertText/editDocument/deleteText
    - If multiple matches, use the first one (or the one that makes sense in context)
    - For "Delete and substitute"/"Replace"/"Substitute" instructions:
-     - Use editDocument (NOT deleteText + insertText). This renders a proper inline replacement: green new text at the start, red struck-through old text after.
-     - If the instruction references numbered paragraphs (e.g., "1.2", "1.3"), set searchText to the numbered label (e.g., "1.2") and set newText to the replacement content.
-     - IMPORTANT: For numbered sections, editDocument/deleteText will automatically find and operate on the ENTIRE section (all content from "1.2" until the next sibling section "1.3" or parent "2."). You don't need to manually find all the content.
+     - Use editDocument (NOT deleteText + insertText). This keeps the same bullet/number and shows green new + red struck-through old in that item.
+     - If the instruction references numbered paragraphs (e.g., "1.2", "1.3"), set searchText to that label (e.g., "1.3") and set newText to the COMPLETE replacement content. Do NOT truncate or cut off newText—include the full replacement.
+     - editDocument operates on that section (e.g. all content from "1.3" until the next sibling "1.4" or parent "2.") within the same list item.
      - Only use insertText for true additions (e.g., "Add the following paragraph before ...") where no existing text is being replaced.
    - Call the appropriate tool with the matchText as searchText
 
