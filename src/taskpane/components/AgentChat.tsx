@@ -683,13 +683,14 @@ const createStyles = (isLight: boolean): any => ({
   changeContentToggleRow: {
     display: "flex",
     alignItems: "center",
-    justifyContent: "flex-end",
-    marginTop: "4px",
+    justifyContent: "center",
+    marginTop: "2px",
+    marginBottom: "-2px",
   },
   changeContentToggleBtn: {
     display: "flex",
     alignItems: "center",
-    padding: "2px 4px",
+    padding: "0 4px",
     border: "none",
     background: "none",
     cursor: "pointer",
@@ -768,8 +769,27 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
   const [bulkIsProcessing, setBulkIsProcessing] = useState<boolean>(false);
   const [expandedChecklistSteps, setExpandedChecklistSteps] = useState<Set<string>>(new Set());
   const [expandedChangeIds, setExpandedChangeIds] = useState<Set<string>>(new Set());
+  const [thinkingWordIndex, setThinkingWordIndex] = useState(0);
+  const [thinkingDotCount, setThinkingDotCount] = useState(1);
   const messageIdCounter = useRef<number>(0);
   const lightStyles = useLightStyles();
+
+  const THINKING_WORDS = ["Thinking", "Analyzing", "Writing", "Reviewing"];
+  useEffect(() => {
+    if (!isLoading) return () => {};
+    const wordInterval = setInterval(
+      () => setThinkingWordIndex((i) => (i + 1) % THINKING_WORDS.length),
+      2500
+    );
+    const dotInterval = setInterval(
+      () => setThinkingDotCount((d) => (d >= 3 ? 1 : d + 1)),
+      400
+    );
+    return () => {
+      clearInterval(wordInterval);
+      clearInterval(dotInterval);
+    };
+  }, [isLoading]);
   const darkStyles = useDarkStyles();
   const styles = isLightTheme ? lightStyles : darkStyles;
 
@@ -1437,7 +1457,9 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
                                     aria-expanded={expanded}
                                   >
                                     <span className={styles.checklistItemPreview} title={step.text}>
-                                      {preview}
+                                      {expanded && canExpand
+                                        ? step.text.slice(0, CHECKLIST_PREVIEW_LEN)
+                                        : preview}
                                     </span>
                                     <span className={styles.checklistItemExpandIcon}>
                                       {expanded ? (
@@ -1674,8 +1696,10 @@ const AgentChat: React.FC<AgentChatProps> = ({ agent }) => {
           )}
           {isLoading && (
             <div className={styles.thinking}>
-              <Spinner size="tiny" />
-              <span>Processing...</span>
+              <span>
+                {THINKING_WORDS[thinkingWordIndex]}
+                {".".repeat(thinkingDotCount)}
+              </span>
             </div>
           )}
           <div ref={messagesEndRef} />
